@@ -38,6 +38,7 @@ type RawChatSummary = {
 		deleted: boolean;
 	} | null;
 	is_self: boolean;
+	is_archived: boolean;
 };
 
 type RawReplyPreview = {
@@ -78,6 +79,7 @@ export type ChatSummary = {
 		deleted: boolean;
 	} | null;
 	isSelf: boolean;
+	isArchived: boolean;
 };
 
 export type ApiMedia = {
@@ -195,6 +197,7 @@ export async function listChats(token: string): Promise<ChatSummary[]> {
 				}
 			: null,
 		isSelf: c.is_self,
+		isArchived: c.is_archived,
 	}));
 }
 
@@ -246,6 +249,13 @@ export async function lookupUser(token: string, username: string) {
 		},
 	)) as { user_id: string; username: string };
 	return { userId: body.user_id, username: body.username };
+}
+
+export async function searchUsers(token: string, query: string) {
+	const body = (await request(`/users/search?q=${encodeURIComponent(query)}`, {
+		token,
+	})) as { user_id: string; username: string }[];
+	return body.map((u) => ({ userId: u.user_id, username: u.username }));
 }
 
 export async function createDirectChat(token: string, withUserId: string) {
@@ -329,6 +339,20 @@ export async function uploadMedia(
 // participant's copy is untouched.
 export async function clearChat(token: string, chatId: string): Promise<void> {
 	await request(`/chats/${chatId}/clear`, { method: "POST", token });
+}
+
+export async function archiveChat(
+	token: string,
+	chatId: string,
+): Promise<void> {
+	await request(`/chats/${chatId}/archive`, { method: "POST", token });
+}
+
+export async function unarchiveChat(
+	token: string,
+	chatId: string,
+): Promise<void> {
+	await request(`/chats/${chatId}/unarchive`, { method: "POST", token });
 }
 
 // "Deletes" the chat for the caller only — it drops out of their list and

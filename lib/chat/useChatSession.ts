@@ -159,6 +159,7 @@ export type UIConversation = {
 	// identity in this case; the UI labels it distinctly rather than
 	// showing it as if it were a chat with another person.
 	isSelf: boolean;
+	archived: boolean;
 };
 
 export type CallStatus =
@@ -418,6 +419,7 @@ export function useChatSession() {
 					hasMoreHistory: existing?.hasMoreHistory ?? true,
 					unreadCount: existing?.unreadCount ?? 0,
 					isSelf: existing?.isSelf ?? false,
+					archived: existing?.archived ?? false,
 					...patch,
 				};
 				return { ...current, [chatId]: next };
@@ -435,6 +437,7 @@ export function useChatSession() {
 				name: chat.otherUsername,
 				otherUserId: chat.otherUserId,
 				isSelf: chat.isSelf,
+				archived: chat.isArchived,
 				preview: previewTextFor(
 					chat.lastMessage?.text ?? "",
 					chat.lastMessage?.mediaKind ?? null,
@@ -1096,6 +1099,18 @@ export function useChatSession() {
 		[session, upsertConversation, connectGateway],
 	);
 
+	const searchUsers = useCallback(
+		async (query: string) => {
+			if (!session || !query.trim()) return [];
+			try {
+				return await api.searchUsers(session.token, query.trim());
+			} catch {
+				return [];
+			}
+		},
+		[session],
+	);
+
 	const sendMessage = useCallback(
 		(chatId: string, text: string, replyToId?: string) => {
 			clientRef.current?.sendMessage(
@@ -1275,6 +1290,37 @@ export function useChatSession() {
 					ok: false,
 					error:
 						err instanceof api.ApiError ? err.message : "failed to clear chat",
+				};
+			}
+		},
+		[session],
+	);
+
+	// Toggles this chat's visibility in the caller's own main list — never
+	// touches membership or the other member's view (see
+	// `ChatService::archive_chat`/`unarchive_chat` on the backend).
+	const setChatArchived = useCallback(
+		async (
+			chatId: string,
+			archived: boolean,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				if (archived) await api.archiveChat(session.token, chatId);
+				else await api.unarchiveChat(session.token, chatId);
+				setConversations((current) => {
+					const existing = current[chatId];
+					if (!existing) return current;
+					return { ...current, [chatId]: { ...existing, archived } };
+				});
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: `failed to ${archived ? "archive" : "unarchive"} chat`,
 				};
 			}
 		},
@@ -1530,12 +1576,14 @@ export function useChatSession() {
 		login,
 		logout,
 		startChat,
+		searchUsers,
 		sendMessage,
 		sendMediaMessage,
 		forwardMessage,
 		editMessage,
 		deleteMessage,
 		clearChat,
+		setChatArchived,
 		deleteChat,
 		blockUser,
 		unblockUser,

@@ -6,12 +6,12 @@ import {
 	AlignRight,
 	Archive,
 	ArrowDown,
+	ArrowLeft,
 	Ban,
 	Bell,
 	Bold,
 	Bookmark,
 	CheckCheck,
-	ChevronDown,
 	CircleDot,
 	CircleHelp,
 	CornerUpLeft,
@@ -27,7 +27,6 @@ import {
 	Paperclip,
 	Pause,
 	Pencil,
-	PenLine,
 	Phone,
 	Play,
 	Reply,
@@ -115,7 +114,6 @@ type TranslationKey =
 	| "search"
 	| "chats"
 	| "pinned"
-	| "recent"
 	| "settings"
 	| "theme"
 	| "system"
@@ -135,9 +133,8 @@ type TranslationKey =
 	| "emoji"
 	| "roundVideo"
 	| "close"
-	| "newChat"
-	| "allChats"
 	| "noResults"
+	| "globalSearch"
 	| "me"
 	| "preferences"
 	| "account"
@@ -151,7 +148,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Xabarlar yoki odamlarni qidiring",
 		chats: "Suhbatlar",
 		pinned: "QADALGAN",
-		recent: "SO‘NGGILAR",
 		settings: "Sozlamalar",
 		theme: "Ko‘rinish",
 		system: "Tizim",
@@ -171,9 +167,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Emoji qo‘shish",
 		roundVideo: "Dumaloq video yuborish",
 		close: "Suhbatlar ro‘yxatini yopish",
-		newChat: "Yangi xabar",
-		allChats: "Barcha suhbatlar",
 		noResults: "Suhbatlar topilmadi",
+		globalSearch: "Foydalanuvchilar",
 		me: "Siz",
 		preferences: "Afzalliklar",
 		account: "Hisob",
@@ -186,7 +181,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Хабарлар ёки одамларни қидиринг",
 		chats: "Суҳбатлар",
 		pinned: "ҚАДАЛГАН",
-		recent: "СЎНГГИЛАР",
 		settings: "Созламалар",
 		theme: "Кўриниш",
 		system: "Тизим",
@@ -206,9 +200,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Эмодзи қўшиш",
 		roundVideo: "Думалоқ видео юбориш",
 		close: "Суҳбатлар рўйхатини ёпиш",
-		newChat: "Янги хабар",
-		allChats: "Барча суҳбатлар",
 		noResults: "Суҳбатлар топилмади",
+		globalSearch: "Фойдаланувчилар",
 		me: "Сиз",
 		preferences: "Афзалликлар",
 		account: "Ҳисоб",
@@ -221,7 +214,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Search messages or people",
 		chats: "Chats",
 		pinned: "PINNED",
-		recent: "RECENT",
 		settings: "Settings",
 		theme: "Appearance",
 		system: "System",
@@ -241,9 +233,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Add emoji",
 		roundVideo: "Record a round video",
 		close: "Close conversation list",
-		newChat: "New message",
-		allChats: "All chats",
 		noResults: "No conversations found",
+		globalSearch: "Users",
 		me: "You",
 		preferences: "Preferences",
 		account: "Account",
@@ -256,7 +247,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Поиск сообщений и людей",
 		chats: "Чаты",
 		pinned: "ЗАКРЕПЛЁННЫЕ",
-		recent: "НЕДАВНИЕ",
 		settings: "Настройки",
 		theme: "Оформление",
 		system: "Системная",
@@ -276,9 +266,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Добавить эмодзи",
 		roundVideo: "Записать круглое видео",
 		close: "Закрыть список чатов",
-		newChat: "Новое сообщение",
-		allChats: "Все чаты",
 		noResults: "Чаты не найдены",
+		globalSearch: "Пользователи",
 		me: "Вы",
 		preferences: "Предпочтения",
 		account: "Аккаунт",
@@ -291,7 +280,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Nachrichten oder Personen suchen",
 		chats: "Chats",
 		pinned: "ANGEHEFTET",
-		recent: "LETZTE",
 		settings: "Einstellungen",
 		theme: "Darstellung",
 		system: "System",
@@ -311,9 +299,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Emoji hinzufügen",
 		roundVideo: "Rundvideo aufnehmen",
 		close: "Chatliste schließen",
-		newChat: "Neue Nachricht",
-		allChats: "Alle Chats",
 		noResults: "Keine Chats gefunden",
+		globalSearch: "Benutzer",
 		me: "Du",
 		preferences: "Einstellungen",
 		account: "Konto",
@@ -326,7 +313,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Buscar mensajes o personas",
 		chats: "Chats",
 		pinned: "FIJADOS",
-		recent: "RECIENTES",
 		settings: "Ajustes",
 		theme: "Apariencia",
 		system: "Sistema",
@@ -346,9 +332,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Añadir emoji",
 		roundVideo: "Grabar un video redondo",
 		close: "Cerrar lista de conversaciones",
-		newChat: "Nuevo mensaje",
-		allChats: "Todos los chats",
 		noResults: "No se encontraron conversaciones",
+		globalSearch: "Usuarios",
 		me: "Tú",
 		preferences: "Preferencias",
 		account: "Cuenta",
@@ -361,7 +346,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Билдирүүлөрдү же адамдарды издөө",
 		chats: "Маектер",
 		pinned: "БЕКИТИЛГЕН",
-		recent: "АКЫРКЫ",
 		settings: "Жөндөөлөр",
 		theme: "Көрүнүшү",
 		system: "Система",
@@ -381,9 +365,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Эмодзи кошуу",
 		roundVideo: "Тегерек видео жазуу",
 		close: "Маектер тизмесин жабуу",
-		newChat: "Жаңы билдирүү",
-		allChats: "Бардык маектер",
 		noResults: "Маектер табылган жок",
+		globalSearch: "Пайдаланушылар",
 		me: "Сиз",
 		preferences: "Тандоолор",
 		account: "Аккаунт",
@@ -396,7 +379,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Хабарларды немесе адамдарды іздеу",
 		chats: "Чаттар",
 		pinned: "БЕКІТІЛГЕН",
-		recent: "СОҢҒЫ",
 		settings: "Баптаулар",
 		theme: "Көрініс",
 		system: "Жүйе",
@@ -416,9 +398,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Эмодзи қосу",
 		roundVideo: "Дөңгелек видео жазу",
 		close: "Чаттар тізімін жабу",
-		newChat: "Жаңа хабарлама",
-		allChats: "Барлық чаттар",
 		noResults: "Чаттар табылмады",
+		globalSearch: "Колдонуучулар",
 		me: "Сіз",
 		preferences: "Қалаулар",
 		account: "Тіркелгі",
@@ -431,7 +412,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Ҷустуҷӯи паёмҳо ё одамон",
 		chats: "Чатҳо",
 		pinned: "САБТШУДА",
-		recent: "ОХИРИН",
 		settings: "Танзимот",
 		theme: "Намуди зоҳирӣ",
 		system: "Система",
@@ -451,9 +431,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Илова кардани эмодзи",
 		roundVideo: "Сабти видеои гард",
 		close: "Пӯшидани рӯйхати чатҳо",
-		newChat: "Паёми нав",
-		allChats: "Ҳамаи чатҳо",
 		noResults: "Чат ёфт нашуд",
+		globalSearch: "Корбарон",
 		me: "Шумо",
 		preferences: "Бартариҳо",
 		account: "Ҳисоб",
@@ -466,7 +445,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Habarları ýa-da adamlary gözle",
 		chats: "Söhbetler",
 		pinned: "BERKITLENEN",
-		recent: "SOŇKY",
 		settings: "Sazlamalar",
 		theme: "Daşky görnüş",
 		system: "Ulgam",
@@ -486,9 +464,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Emoji goş",
 		roundVideo: "Tegelek wideo ýazdyr",
 		close: "Söhbet sanawyny ýap",
-		newChat: "Täze habar",
-		allChats: "Ähli söhbetler",
 		noResults: "Söhbet tapylmady",
+		globalSearch: "Ulanyjylar",
 		me: "Siz",
 		preferences: "Saýlamalar",
 		account: "Hasap",
@@ -501,7 +478,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Mesaj veya kişi ara",
 		chats: "Sohbetler",
 		pinned: "SABİTLENEN",
-		recent: "SON",
 		settings: "Ayarlar",
 		theme: "Görünüm",
 		system: "Sistem",
@@ -521,9 +497,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Emoji ekle",
 		roundVideo: "Yuvarlak video kaydet",
 		close: "Sohbet listesini kapat",
-		newChat: "Yeni mesaj",
-		allChats: "Tüm sohbetler",
 		noResults: "Sohbet bulunamadı",
+		globalSearch: "Kullanıcılar",
 		me: "Sen",
 		preferences: "Tercihler",
 		account: "Hesap",
@@ -536,7 +511,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Rechercher des messages ou des personnes",
 		chats: "Discussions",
 		pinned: "ÉPINGLÉS",
-		recent: "RÉCENTS",
 		settings: "Paramètres",
 		theme: "Apparence",
 		system: "Système",
@@ -556,9 +530,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Ajouter un emoji",
 		roundVideo: "Enregistrer une vidéo ronde",
 		close: "Fermer la liste des discussions",
-		newChat: "Nouveau message",
-		allChats: "Toutes les discussions",
 		noResults: "Aucune discussion trouvée",
+		globalSearch: "Utilisateurs",
 		me: "Vous",
 		preferences: "Préférences",
 		account: "Compte",
@@ -571,7 +544,6 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		search: "Cerca messaggi o persone",
 		chats: "Chat",
 		pinned: "FISSATE",
-		recent: "RECENTI",
 		settings: "Impostazioni",
 		theme: "Aspetto",
 		system: "Sistema",
@@ -591,9 +563,8 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		emoji: "Aggiungi emoji",
 		roundVideo: "Registra un video rotondo",
 		close: "Chiudi l'elenco delle chat",
-		newChat: "Nuovo messaggio",
-		allChats: "Tutte le chat",
 		noResults: "Nessuna chat trovata",
+		globalSearch: "Utenti",
 		me: "Tu",
 		preferences: "Preferenze",
 		account: "Account",
@@ -843,10 +814,21 @@ function MediaBubble({
 // before the textarea stops growing and starts scrolling internally.
 const COMPOSER_MAX_HEIGHT = 208;
 
+// Drag-resize range for the sidebar. The minimum stops right at avatar
+// width — narrower than that and the conversation name/preview text would
+// have nowhere to go, so the list collapses into an icon rail instead.
+const SIDEBAR_MIN_WIDTH = 72;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 326;
+const SIDEBAR_COLLAPSE_THRESHOLD = 110;
+
 export default function Home() {
 	const session = useChatSession();
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
+	const [globalUserResults, setGlobalUserResults] = useState<
+		{ userId: string; username: string }[]
+	>([]);
 	const [draft, setDraft] = useState("");
 	const [draftAlign, setDraftAlign] = useState<TextAlign>("left");
 	const [theme, setTheme] = useState<Theme>("system");
@@ -856,10 +838,13 @@ export default function Home() {
 	const [systemIsDark, setSystemIsDark] = useState(false);
 	const [preferencesLoaded, setPreferencesLoaded] = useState(false);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [archiveViewOpen, setArchiveViewOpen] = useState(false);
+	const [blockedViewOpen, setBlockedViewOpen] = useState(false);
+	const [savedMessagesPinned, setSavedMessagesPinned] = useState(false);
 	const [mobileListOpen, setMobileListOpen] = useState(false);
-	const [newChatOpen, setNewChatOpen] = useState(false);
-	const [newChatUsername, setNewChatUsername] = useState("");
-	const [newChatError, setNewChatError] = useState<string | null>(null);
+	const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+	const [resizingSidebar, setResizingSidebar] = useState(false);
+	const sidebarResizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT_WIDTH });
 	const [callMinimized, setCallMinimized] = useState(false);
 	const [mediaError, setMediaError] = useState<string | null>(null);
 	const [recording, setRecording] = useState<{
@@ -941,6 +926,51 @@ export default function Home() {
 	// has loaded (there's no server-side search index), same trade-off any
 	// lazily-loaded chat history implies.
 	const trimmedQuery = query.trim().toLowerCase();
+
+	useEffect(() => {
+		const q = query.trim();
+		if (!q) {
+			setGlobalUserResults([]);
+			return;
+		}
+		let cancelled = false;
+		const timeout = setTimeout(async () => {
+			const results = await session.searchUsers(q);
+			if (!cancelled) setGlobalUserResults(results);
+		}, 250);
+		return () => {
+			cancelled = true;
+			clearTimeout(timeout);
+		};
+	}, [query, session.searchUsers]);
+
+	// Global search also surfaces users you don't have a conversation with
+	// yet — Telegram shows these below your own chats instead of silently
+	// limiting "search" to chats you already started. Anyone with an
+	// existing conversation is excluded here since they're already in
+	// `filtered` above.
+	const existingPartnerIds = new Set(
+		conversations.map((c) => c.otherUserId).filter(Boolean),
+	);
+	const globalResults = trimmedQuery
+		? globalUserResults.filter((u) => !existingPartnerIds.has(u.userId))
+		: [];
+
+	const archivedChats = conversations
+		.filter((c) => c.archived)
+		.filter((c) => {
+			if (!trimmedQuery) return true;
+			const name = c.isSelf ? "saved messages" : c.name.toLowerCase();
+			return name.includes(trimmedQuery);
+		});
+
+	const blockedUserIds = new Set(session.blockedUsers.map((u) => u.userId));
+	const blockedChats = conversations
+		.filter((c) => !c.isSelf && blockedUserIds.has(c.otherUserId))
+		.filter(
+			(c) => !trimmedQuery || c.name.toLowerCase().includes(trimmedQuery),
+		);
+
 	// Saved Messages always sorts first in the sidebar, the same way
 	// Telegram pins it — but `conversations` itself (used for the default-
 	// active chat on load) stays activity-ordered, so opening the app
@@ -948,6 +978,10 @@ export default function Home() {
 	// most recent conversation.
 	const filtered = conversations
 		.filter((conversation) => {
+			if (conversation.archived) return false;
+			if (!conversation.isSelf && blockedUserIds.has(conversation.otherUserId))
+				return false;
+			if (conversation.isSelf && !savedMessagesPinned) return false;
 			if (!trimmedQuery) return true;
 			if (conversation.name.toLowerCase().includes(trimmedQuery)) return true;
 			return conversation.messages.some(
@@ -957,7 +991,11 @@ export default function Home() {
 					m.text.toLowerCase().includes(trimmedQuery),
 			);
 		})
-		.sort((a, b) => (a.isSelf === b.isSelf ? 0 : a.isSelf ? -1 : 1));
+		.sort((a, b) => {
+			if (!savedMessagesPinned) return 0;
+			return a.isSelf === b.isSelf ? 0 : a.isSelf ? -1 : 1;
+		});
+	const savedPinned = savedMessagesPinned && filtered[0]?.isSelf === true;
 
 	// When a chat only matched because of something *in* it rather than its
 	// name, show that message as the subtitle instead of the normal last-
@@ -979,6 +1017,30 @@ export default function Home() {
 			);
 		return match ? stripFormatting(match.text) : null;
 	}
+
+	useEffect(() => {
+		if (!resizingSidebar) return;
+		function handleMove(event: MouseEvent) {
+			const delta = event.clientX - sidebarResizeStartRef.current.x;
+			const next = Math.min(
+				SIDEBAR_MAX_WIDTH,
+				Math.max(
+					SIDEBAR_MIN_WIDTH,
+					sidebarResizeStartRef.current.width + delta,
+				),
+			);
+			setSidebarWidth(next);
+		}
+		function handleUp() {
+			setResizingSidebar(false);
+		}
+		window.addEventListener("mousemove", handleMove);
+		window.addEventListener("mouseup", handleUp);
+		return () => {
+			window.removeEventListener("mousemove", handleMove);
+			window.removeEventListener("mouseup", handleUp);
+		};
+	}, [resizingSidebar]);
 
 	useEffect(() => {
 		const storedTheme = localStorage.getItem("chat-theme") as Theme | null;
@@ -1522,6 +1584,15 @@ export default function Home() {
 		if (!result.ok) setChatActionError(result.error);
 	}
 
+	async function handleToggleArchive() {
+		if (!active) return;
+		setChatActionBusy(true);
+		setChatActionError(null);
+		const result = await session.setChatArchived(active.id, !active.archived);
+		setChatActionBusy(false);
+		if (!result.ok) setChatActionError(result.error);
+	}
+
 	async function handleDeleteChat() {
 		if (!active) return;
 		setChatActionBusy(true);
@@ -1607,18 +1678,12 @@ export default function Home() {
 		else setForwardError(result.error);
 	}
 
-	async function submitNewChat(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault();
-		const username = newChatUsername.trim();
-		if (!username) return;
-		setNewChatError(null);
+	async function startNewChatWith(username: string) {
 		const result = await session.startChat(username);
 		if (result.ok) {
 			setActiveId(result.chatId);
-			setNewChatOpen(false);
-			setNewChatUsername("");
 		} else {
-			setNewChatError(result.error);
+			console.error("could not start chat:", result.error);
 		}
 	}
 
@@ -1642,22 +1707,6 @@ export default function Home() {
 	return (
 		<main className="app-frame">
 			<header className="app-header">
-				<div className="header-account">
-					<span className="avatar avatar-profile">
-						{me.username.slice(0, 2).toUpperCase()}
-					</span>
-					<span className="profile-copy">
-						<strong>{me.username}</strong>
-						<small>{t.personalSpace}</small>
-					</span>
-				</div>
-				<a className="brand" href="#home" aria-label="MW">
-					<span className="brand-mark">
-						<Ear size={21} strokeWidth={2} />
-						<span className="whisper-waves" aria-hidden="true" />
-					</span>
-					<span className="brand-initials">MW</span>
-				</a>
 				<button
 					type="button"
 					className={`icon-button settings-trigger ${settingsOpen ? "settings-trigger-active" : ""}`}
@@ -1667,22 +1716,76 @@ export default function Home() {
 				>
 					<Settings2 size={19} />
 				</button>
+				<a className="brand" href="#home" aria-label="MW">
+					<span className="brand-mark">
+						<Ear size={21} strokeWidth={2} />
+						<span className="whisper-waves" aria-hidden="true" />
+					</span>
+					<span className="brand-initials">MW</span>
+				</a>
+				<button
+					type="button"
+					className={`icon-button ${savedMessagesPinned ? "settings-trigger-active" : ""}`}
+					onClick={() => {
+						if (savedMessagesPinned) {
+							setSavedMessagesPinned(false);
+							return;
+						}
+						setSavedMessagesPinned(true);
+						const saved = conversations.find((c) => c.isSelf);
+						if (saved) setActiveId(saved.id);
+					}}
+					aria-label="Saved Messages"
+					title="Saved Messages"
+				>
+					<Bookmark size={19} />
+				</button>
+				<button
+					type="button"
+					className={`icon-button ${archiveViewOpen ? "settings-trigger-active" : ""}`}
+					onClick={() => {
+						setBlockedViewOpen(false);
+						setArchiveViewOpen((open) => !open);
+					}}
+					aria-label="Archived chats"
+					title="Archived chats"
+				>
+					<Archive size={19} />
+				</button>
+				<button
+					type="button"
+					className={`icon-button ${blockedViewOpen ? "settings-trigger-active" : ""}`}
+					onClick={() => {
+						setArchiveViewOpen(false);
+						setBlockedViewOpen((open) => !open);
+					}}
+					aria-label="Blocked chats"
+					title="Blocked chats"
+				>
+					<Ban size={19} />
+				</button>
 			</header>
-			<div className="chat-app">
-				<aside className={`sidebar ${mobileListOpen ? "sidebar-open" : ""}`}>
-					<div className="sidebar-top">
-						<strong className="sidebar-title">{t.chats}</strong>
-						<button
-							className="icon-button new-chat"
-							type="button"
-							title={t.newChat}
-							aria-label={t.newChat}
-							onClick={() => setNewChatOpen(true)}
-						>
-							<PenLine size={18} />
-						</button>
-					</div>
-
+			<div
+				className="chat-app"
+				style={{ gridTemplateColumns: `${sidebarWidth}px minmax(0, 1fr)` }}
+			>
+				<aside
+					className={`sidebar mt-2 ${mobileListOpen ? "sidebar-open" : ""} ${sidebarWidth <= SIDEBAR_COLLAPSE_THRESHOLD ? "sidebar-collapsed" : ""}`}
+				>
+					<button
+						type="button"
+						className="sidebar-resize-handle"
+						aria-label="Resize sidebar"
+						onMouseDown={(event) => {
+							event.preventDefault();
+							sidebarResizeStartRef.current = {
+								x: event.clientX,
+								width: sidebarWidth,
+							};
+							setResizingSidebar(true);
+						}}
+						onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
+					/>
 					<label className="search-box">
 						<Search size={17} />
 						<input
@@ -1702,93 +1805,168 @@ export default function Home() {
 						)}
 					</label>
 
-					<div className="sidebar-section-heading">
-						<span>{t.chats}</span>
-						<button
-							type="button"
-							className="text-icon-button"
-							aria-label={t.allChats}
-						>
-							<ChevronDown size={15} />
-						</button>
-					</div>
+					{(archiveViewOpen || blockedViewOpen) && (
+						<div className="sidebar-section-heading">
+							<button
+								type="button"
+								className="sidebar-section-heading-button"
+								onClick={() => {
+									setArchiveViewOpen(false);
+									setBlockedViewOpen(false);
+								}}
+								aria-label="Back"
+							>
+								<ArrowLeft size={16} />
+								<span>
+									{archiveViewOpen ? "Archived chats" : "Blocked chats"}
+								</span>
+							</button>
+						</div>
+					)}
+
 					<div className="conversation-list">
-						{filtered.length === 0 && (
-							<p className="empty-results">{t.noResults}</p>
-						)}
-						{filtered.map((conversation, index) => (
-							<div key={conversation.id}>
-								{!query && index === 0 && (
-									<p className="list-kicker">{t.pinned}</p>
+						{archiveViewOpen || blockedViewOpen ? (
+							<>
+								{(archiveViewOpen ? archivedChats : blockedChats).length ===
+									0 && (
+									<p className="empty-results">
+										{trimmedQuery
+											? t.noResults
+											: archiveViewOpen
+												? "No archived chats"
+												: "No blocked chats"}
+									</p>
 								)}
-								{!query && index === 1 && (
-									<p className="list-kicker recent-kicker">{t.recent}</p>
-								)}
-								<button
-									type="button"
-									className={`conversation ${activeId === conversation.id ? "conversation-active" : ""}`}
-									onClick={() => selectConversation(conversation.id)}
-								>
-									<span
-										className={`avatar avatar-${conversation.color} ${conversation.isSelf ? "avatar-saved" : ""}`}
-									>
-										{conversation.isSelf ? (
-											<Bookmark size={16} />
-										) : (
-											conversation.avatar
-										)}
-										{!conversation.isSelf &&
-											conversation.status === "online" && (
-												<i className="online-dot" />
-											)}
-									</span>
-									<span className="conversation-copy">
-										<span className="conversation-name">
-											{conversation.isSelf
-												? "Saved Messages"
-												: conversation.name}
-										</span>
-										{session.call.chatId === conversation.id &&
-										session.call.status !== "idle" ? (
-											<span className="conversation-calling">
-												<Phone size={11} />
-												{session.call.status === "incoming"
-													? "Incoming call"
-													: session.call.status === "outgoing"
-														? "Calling…"
-														: "On call"}
+								{(archiveViewOpen ? archivedChats : blockedChats).map(
+									(conversation) => (
+										<button
+											key={conversation.id}
+											type="button"
+											className={`conversation ${activeId === conversation.id ? "conversation-active" : ""}`}
+											onClick={() => selectConversation(conversation.id)}
+										>
+											<span
+												className={`avatar avatar-${conversation.color} ${conversation.isSelf ? "avatar-saved" : ""}`}
+											>
+												{conversation.isSelf ? (
+													<Bookmark size={16} />
+												) : (
+													conversation.avatar
+												)}
 											</span>
-										) : conversation.partnerTyping ? (
-											<span className="conversation-typing">
-												{t.typing}
-												<span className="conversation-typing-dots">
-													<i />
-													<i />
-													<i />
+											<span className="conversation-copy">
+												<span className="conversation-name">
+													{conversation.isSelf
+														? "Saved Messages"
+														: conversation.name}
+												</span>
+												<span className="conversation-preview">
+													{conversation.preview}
 												</span>
 											</span>
-										) : (
-											<span className="conversation-preview">
-												{matchedMessageSnippet(conversation) ??
-													conversation.preview}
-											</span>
+										</button>
+									),
+								)}
+							</>
+						) : (
+							<>
+								{filtered.length === 0 && (
+									<p className="empty-results">{t.noResults}</p>
+								)}
+								{filtered.map((conversation, index) => (
+									<div key={conversation.id}>
+										{!query && savedPinned && index === 0 && (
+											<p className="list-kicker">{t.pinned}</p>
 										)}
-									</span>
-									<span className="conversation-meta">
-										<span className="conversation-time">
-											{conversation.time}
-										</span>
-										{conversation.unreadCount > 0 && (
-											<span className="unread-count">
-												{conversation.unreadCount > 99
-													? "99+"
-													: conversation.unreadCount}
+										<button
+											type="button"
+											className={`conversation ${activeId === conversation.id ? "conversation-active" : ""}`}
+											onClick={() => selectConversation(conversation.id)}
+										>
+											<span
+												className={`avatar avatar-${conversation.color} ${conversation.isSelf ? "avatar-saved" : ""}`}
+											>
+												{conversation.isSelf ? (
+													<Bookmark size={16} />
+												) : (
+													conversation.avatar
+												)}
+												{!conversation.isSelf &&
+													conversation.status === "online" && (
+														<i className="online-dot" />
+													)}
 											</span>
-										)}
-									</span>
-								</button>
-							</div>
-						))}
+											<span className="conversation-copy">
+												<span className="conversation-name">
+													{conversation.isSelf
+														? "Saved Messages"
+														: conversation.name}
+												</span>
+												{session.call.chatId === conversation.id &&
+												session.call.status !== "idle" ? (
+													<span className="conversation-calling">
+														<Phone size={11} />
+														{session.call.status === "incoming"
+															? "Incoming call"
+															: session.call.status === "outgoing"
+																? "Calling…"
+																: "On call"}
+													</span>
+												) : conversation.partnerTyping ? (
+													<span className="conversation-typing">
+														{t.typing}
+														<span className="conversation-typing-dots">
+															<i />
+															<i />
+															<i />
+														</span>
+													</span>
+												) : (
+													<span className="conversation-preview">
+														{matchedMessageSnippet(conversation) ??
+															conversation.preview}
+													</span>
+												)}
+											</span>
+											<span className="conversation-meta">
+												<span className="conversation-time">
+													{conversation.time}
+												</span>
+												{conversation.unreadCount > 0 && (
+													<span className="unread-count">
+														{conversation.unreadCount > 99
+															? "99+"
+															: conversation.unreadCount}
+													</span>
+												)}
+											</span>
+										</button>
+									</div>
+								))}
+								{globalResults.length > 0 && (
+									<>
+										<p className="list-kicker">{t.globalSearch}</p>
+										{globalResults.map((user) => (
+											<button
+												key={user.userId}
+												type="button"
+												className="conversation"
+												onClick={() => startNewChatWith(user.username)}
+											>
+												<span className="avatar avatar-teal">
+													{user.username.slice(0, 2).toUpperCase()}
+												</span>
+												<span className="conversation-copy">
+													<span className="conversation-name">
+														{user.username}
+													</span>
+												</span>
+											</button>
+										))}
+									</>
+								)}
+							</>
+						)}
 					</div>
 				</aside>
 
@@ -1905,6 +2083,19 @@ export default function Home() {
 													>
 														<Trash2 size={14} />
 														Clear chat
+													</button>
+													<button
+														type="button"
+														disabled={chatActionBusy}
+														onClick={() => {
+															setChatMenuOpen(false);
+															void handleToggleArchive();
+														}}
+													>
+														<Archive size={14} />
+														{active.archived
+															? "Unarchive chat"
+															: "Archive chat"}
 													</button>
 													{!active.isSelf && (
 														<>
@@ -2646,9 +2837,11 @@ export default function Home() {
 							</button>
 						</div>
 						<div className="settings-account">
-							<span className="avatar avatar-profile">AL</span>
+							<span className="avatar avatar-profile">
+								{me.username.slice(0, 2).toUpperCase()}
+							</span>
 							<span className="profile-copy">
-								<strong>Alex Rivera</strong>
+								<strong>{me.username}</strong>
 								<small>{t.personalSpace}</small>
 							</span>
 						</div>
@@ -2800,35 +2993,6 @@ export default function Home() {
 				onMinimize={() => setCallMinimized(true)}
 				onMuteRing={session.muteRing}
 			/>
-			{newChatOpen && (
-				<div className="modal-overlay">
-					<form className="modal-card" onSubmit={submitNewChat}>
-						<h2>{t.newChat}</h2>
-						{newChatError && <p className="modal-error">{newChatError}</p>}
-						<input
-							value={newChatUsername}
-							onChange={(event) => setNewChatUsername(event.target.value)}
-							placeholder="username"
-						/>
-						<div className="modal-actions">
-							<button
-								type="button"
-								className="modal-cancel"
-								onClick={() => {
-									setNewChatOpen(false);
-									setNewChatError(null);
-									setNewChatUsername("");
-								}}
-							>
-								Cancel
-							</button>
-							<button type="submit" className="modal-submit">
-								Start
-							</button>
-						</div>
-					</form>
-				</div>
-			)}
 			{lightboxId && (
 				<MediaLightbox
 					items={mediaItems}
