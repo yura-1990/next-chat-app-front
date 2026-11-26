@@ -12,10 +12,14 @@ import {
 	BellOff,
 	Bold,
 	Bookmark,
+	Check,
 	CheckCheck,
+	ChevronDown,
 	ChevronRight,
+	ChevronUp,
 	CircleDot,
 	CircleHelp,
+	Copy,
 	CornerUpLeft,
 	Ear,
 	Forward,
@@ -26,6 +30,7 @@ import {
 	Maximize2,
 	Menu,
 	Mic,
+	Minus,
 	Monitor,
 	Moon,
 	MoreHorizontal,
@@ -36,7 +41,10 @@ import {
 	Pencil,
 	Phone,
 	PhoneCall,
+	Pin,
+	PinOff,
 	Play,
+	Plus,
 	Radio,
 	Reply,
 	Search,
@@ -47,6 +55,7 @@ import {
 	Strikethrough,
 	Sun,
 	Trash2,
+	Type,
 	Underline,
 	UserPlus,
 	Users,
@@ -87,6 +96,7 @@ import {
 import {
 	type ChannelPreview,
 	type GroupMember,
+	type LinkPreview,
 	listGroupMembers,
 	type MediaUploadKind,
 	mediaUrl,
@@ -105,7 +115,10 @@ import {
 	type SoundTheme,
 } from "@/lib/chat/sound";
 import {
+	extractFirstUrl,
 	parseFormattedText,
+	splitCodeBlocks,
+	splitLinks,
 	stripFormatting,
 	type TextAlign,
 	trimFormattedText,
@@ -141,6 +154,14 @@ const WALLPAPER_LABELS: Record<Wallpaper, string> = {
 	leaves: "Leaves",
 	none: "Plain",
 };
+// A percentage multiplier on every font-size in the app (see the
+// `--text-scale` CSS variable every `font-size: calc(...)` rule reads) —
+// not just chat bubbles, every piece of UI text scales together, the same
+// way Telegram Desktop's own "Interface scale" setting works.
+const TEXT_SCALE_MIN = 70;
+const TEXT_SCALE_MAX = 150;
+const TEXT_SCALE_STEP = 10;
+const TEXT_SCALE_DEFAULT = 100;
 type TranslationKey =
 	| "search"
 	| "chats"
@@ -744,7 +765,177 @@ function mediaKindLabel(kind: string): string {
 	return "File";
 }
 
+// Click-to-copy inline code span — `like this`. Rendered purely as React
+// text content (never dangerouslySetInnerHTML, never eval/Function'd), so
+// whatever a user pastes here is inert: it can only ever be displayed and,
+// on click, written verbatim to the clipboard — never executed.
+function InlineCode({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+
+	async function handleCopy(event: { stopPropagation: () => void }) {
+		event.stopPropagation();
+		try {
+			await navigator.clipboard.writeText(text);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1200);
+		} catch {
+			// clipboard permission denied/unavailable — nothing more to do
+		}
+	}
+
+	return (
+		<button
+			type="button"
+			className={`inline-code ${copied ? "inline-code-copied" : ""}`}
+			title={copied ? "Copied!" : "Click to copy"}
+			onClick={handleCopy}
+		>
+			{text}
+		</button>
+	);
+}
+
+function renderRunText(text: string): ReactNode {
+	const parts = splitLinks(text);
+	if (parts.length === 1 && !parts[0].url && !parts[0].code) return text;
+	// Keyed by the part's starting offset in `text` rather than its array
+	// index — still a static, non-reorderable list, but a plain index key
+	// trips the linter's "could silently mask reordering bugs" heuristic.
+	let offset = 0;
+	return (
+		<>
+			{parts.map((part) => {
+				const key = offset;
+				offset += part.text.length;
+				if (part.code) return <InlineCode key={key} text={part.text} />;
+				return part.url ? (
+					<a
+						key={key}
+						href={part.url}
+						target="_blank"
+						rel="noreferrer"
+						className="message-link"
+						onClick={(event) => event.stopPropagation()}
+					>
+						{part.text}
+					</a>
+				) : (
+					<Fragment key={key}>{part.text}</Fragment>
+				);
+			})}
+		</>
+	);
+}
+
+function LinkPreviewCard({
+	url,
+	getLinkPreview,
+}: {
+	url: string;
+	getLinkPreview: (url: string) => Promise<LinkPreview | null>;
+}) {
+	const [preview, setPreview] = useState<LinkPreview | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		setPreview(null);
+		getLinkPreview(url).then((result) => {
+			if (!cancelled) setPreview(result);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [url, getLinkPreview]);
+
+	if (!preview || (!preview.title && !preview.description && !preview.image))
+		return null;
+
+	return (
+		<a
+			href={url}
+			target="_blank"
+			rel="noreferrer"
+			className="link-preview-card"
+			onClick={(event) => event.stopPropagation()}
+		>
+			{preview.image && (
+				// biome-ignore lint/performance/noImgElement: remote, arbitrary-origin preview thumbnail — next/image's optimizer can't proxy it
+				<img className="link-preview-image" src={preview.image} alt="" />
+			)}
+			<span className="link-preview-copy">
+				{preview.siteName && <small>{preview.siteName}</small>}
+				{preview.title && <strong>{preview.title}</strong>}
+				{preview.description && <span>{preview.description}</span>}
+			</span>
+		</a>
+	);
+}
+
+// Fenced code block — ```lang\n...\n``` — rendered verbatim (plain text
+// content only) with a copy button, same never-executed guarantee as
+// InlineCode: this is display + clipboard only, nothing here is eval'd,
+// templated, or passed to a shell/interpreter in any language.
+function CodeBlock({ code, lang }: { code: string; lang: string | null }) {
+	const [copied, setCopied] = useState(false);
+
+	async function handleCopy() {
+		try {
+			await navigator.clipboard.writeText(code);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1200);
+		} catch {
+			// clipboard permission denied/unavailable — nothing more to do
+		}
+	}
+
+	return (
+		<div className="code-block">
+			<div className="code-block-header">
+				<span>{lang || "code"}</span>
+				<button
+					type="button"
+					className="code-block-copy"
+					onClick={(event) => {
+						event.stopPropagation();
+						void handleCopy();
+					}}
+				>
+					{copied ? <Check size={13} /> : <Copy size={13} />}
+					{copied ? "Copied" : "Copy"}
+				</button>
+			</div>
+			<pre>
+				<code>{code}</code>
+			</pre>
+		</div>
+	);
+}
+
 function FormattedText({ text }: { text: string }) {
+	const segments = splitCodeBlocks(text);
+	if (segments.length === 1 && segments[0].type === "text") {
+		return <FormattedTextLines text={text} />;
+	}
+	// Keyed by the segment's starting offset in `text`, same reasoning as
+	// the other static-split keys in this file (see renderRunText).
+	let offset = 0;
+	return (
+		<>
+			{segments.map((segment) => {
+				const key = offset;
+				offset +=
+					segment.type === "code" ? segment.code.length : segment.text.length;
+				return segment.type === "code" ? (
+					<CodeBlock key={key} code={segment.code} lang={segment.lang} />
+				) : (
+					<FormattedTextLines key={key} text={segment.text} />
+				);
+			})}
+		</>
+	);
+}
+
+function FormattedTextLines({ text }: { text: string }) {
 	const lines = parseFormattedText(text);
 	return (
 		<>
@@ -757,7 +948,7 @@ function FormattedText({ text }: { text: string }) {
 				>
 					{line.runs.length === 0 && " "}
 					{line.runs.map((run, runIndex) => {
-						let node: ReactNode = run.text;
+						let node: ReactNode = renderRunText(run.text);
 						if (run.bold) node = <strong>{node}</strong>;
 						if (run.italic) node = <em>{node}</em>;
 						if (run.underline) node = <u>{node}</u>;
@@ -906,6 +1097,7 @@ const SIDEBAR_COLLAPSE_THRESHOLD = 110;
 export default function Home() {
 	const session = useChatSession();
 	const [activeId, setActiveId] = useState<string | null>(null);
+	const [navBackId, setNavBackId] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
 	const [globalUserResults, setGlobalUserResults] = useState<
 		{ userId: string; username: string }[]
@@ -920,6 +1112,7 @@ export default function Home() {
 	const [theme, setTheme] = useState<Theme>("system");
 	const [locale, setLocale] = useState<Locale>("en");
 	const [wallpaper, setWallpaper] = useState<Wallpaper>("waves");
+	const [textScale, setTextScale] = useState(TEXT_SCALE_DEFAULT);
 	const [accentColor, setAccentColor] = useState<AccentColor>("teal");
 	const [systemIsDark, setSystemIsDark] = useState(false);
 	const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -977,6 +1170,7 @@ export default function Home() {
 	const [channelSearchBusy, setChannelSearchBusy] = useState(false);
 	const [groupInfoOpen, setGroupInfoOpen] = useState(false);
 	const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+	const [groupMemberQuery, setGroupMemberQuery] = useState("");
 	const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
 	const [accountDialogOpen, setAccountDialogOpen] = useState(false);
 	const [avatarCarouselMediaId, setAvatarCarouselMediaId] = useState<
@@ -986,6 +1180,10 @@ export default function Home() {
 		"sound" | "ringtone" | "wallpaper" | "accent" | null
 	>(null);
 	const [lightboxId, setLightboxId] = useState<string | null>(null);
+	const [chatSearchOpen, setChatSearchOpen] = useState(false);
+	const [chatSearchQuery, setChatSearchQuery] = useState("");
+	const [chatSearchIndex, setChatSearchIndex] = useState(0);
+	const [pinnedIndex, setPinnedIndex] = useState(0);
 	const [lightboxLoadingOlder, setLightboxLoadingOlder] = useState(false);
 	const [editing, setEditing] = useState<{
 		chatId: string;
@@ -1038,6 +1236,53 @@ export default function Home() {
 	// has loaded (there's no server-side search index), same trade-off any
 	// lazily-loaded chat history implies.
 	const trimmedQuery = query.trim().toLowerCase();
+
+	const pinnedMessages = active?.pinnedMessages ?? [];
+	const clampedPinnedIndex = pinnedMessages.length
+		? Math.min(pinnedIndex, pinnedMessages.length - 1)
+		: 0;
+	const activePinnedMessage = pinnedMessages[clampedPinnedIndex] ?? null;
+
+	const trimmedChatSearchQuery = chatSearchQuery.trim().toLowerCase();
+	const chatSearchMatches =
+		chatSearchOpen && active && trimmedChatSearchQuery
+			? active.messages.filter(
+					(m) =>
+						!m.deleted &&
+						!m.isSystem &&
+						!m.isCallEvent &&
+						stripFormatting(m.text)
+							.toLowerCase()
+							.includes(trimmedChatSearchQuery),
+				)
+			: [];
+	const clampedChatSearchIndex = chatSearchMatches.length
+		? Math.min(chatSearchIndex, chatSearchMatches.length - 1)
+		: 0;
+
+	// Jump to the first match as soon as a new query turns up any — further
+	// moves between matches are driven by the prev/next buttons instead, not
+	// by this effect, so it only reacts to the query itself.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only the typed query should trigger the initial jump, not every match-array identity change
+	useEffect(() => {
+		if (!chatSearchOpen || chatSearchMatches.length === 0) return;
+		scrollToMessage(chatSearchMatches[0].id);
+	}, [chatSearchQuery, chatSearchOpen]);
+
+	function jumpToSearchMatch(delta: number) {
+		if (chatSearchMatches.length === 0) return;
+		const next =
+			(clampedChatSearchIndex + delta + chatSearchMatches.length) %
+			chatSearchMatches.length;
+		setChatSearchIndex(next);
+		scrollToMessage(chatSearchMatches[next].id);
+	}
+
+	function jumpToPinnedMessage() {
+		if (!activePinnedMessage) return;
+		scrollToMessage(activePinnedMessage.id);
+		setPinnedIndex((clampedPinnedIndex + 1) % pinnedMessages.length);
+	}
 
 	useEffect(() => {
 		const q = query.trim();
@@ -1105,6 +1350,13 @@ export default function Home() {
 			const name = c.isSelf ? "saved messages" : c.name.toLowerCase();
 			return name.includes(trimmedQuery);
 		});
+
+	const trimmedGroupMemberQuery = groupMemberQuery.trim().toLowerCase();
+	const filteredGroupMembers = trimmedGroupMemberQuery
+		? groupMembers.filter((member) =>
+				member.username.toLowerCase().includes(trimmedGroupMemberQuery),
+			)
+		: groupMembers;
 
 	const blockedUserIds = new Set(session.blockedUsers.map((u) => u.userId));
 	const blockedChats = conversations
@@ -1200,6 +1452,10 @@ export default function Home() {
 		const storedAccent = localStorage.getItem(
 			"chat-accent",
 		) as AccentColor | null;
+		const storedTextScale = Number.parseInt(
+			localStorage.getItem("chat-text-scale") ?? "",
+			10,
+		);
 		if (storedTheme && ["system", "light", "dark"].includes(storedTheme))
 			setTheme(storedTheme);
 		if (storedLocale && Object.hasOwn(localeNames, storedLocale))
@@ -1208,6 +1464,12 @@ export default function Home() {
 			setWallpaper(storedWallpaper);
 		if (storedAccent && ACCENT_COLORS.includes(storedAccent))
 			setAccentColor(storedAccent);
+		if (
+			Number.isFinite(storedTextScale) &&
+			storedTextScale >= TEXT_SCALE_MIN &&
+			storedTextScale <= TEXT_SCALE_MAX
+		)
+			setTextScale(storedTextScale);
 		setPreferencesLoaded(true);
 	}, []);
 
@@ -1231,6 +1493,15 @@ export default function Home() {
 		localStorage.setItem("chat-wallpaper", wallpaper);
 		document.documentElement.dataset.wallpaper = wallpaper;
 	}, [preferencesLoaded, wallpaper]);
+
+	useEffect(() => {
+		if (!preferencesLoaded) return;
+		localStorage.setItem("chat-text-scale", String(textScale));
+		document.documentElement.style.setProperty(
+			"--text-scale",
+			String(textScale / 100),
+		);
+	}, [preferencesLoaded, textScale]);
 
 	useEffect(() => {
 		if (!preferencesLoaded) return;
@@ -1261,6 +1532,12 @@ export default function Home() {
 	}, [active, session.ensureMessagesLoaded]);
 
 	useEffect(() => {
+		if (!active) return;
+		void session.refreshPinnedMessages(active.id);
+	}, [active, session.refreshPinnedMessages]);
+
+	useEffect(() => {
+		setGroupMemberQuery("");
 		if (
 			!groupInfoOpen ||
 			!(active?.isGroup || active?.isChannel) ||
@@ -1311,7 +1588,17 @@ export default function Home() {
 	}, [session.call.status]);
 
 	const messageScrollRef = useRef<HTMLDivElement>(null);
-	const pendingScrollAdjustRef = useRef<number | null>(null);
+	// Anchors the scroll position to a specific message's on-screen position
+	// (rather than a raw scrollHeight delta) whenever older history is
+	// prepended above it — immune to that message's own position shifting
+	// again later as a late-loading image/video bubble above it (inside the
+	// very batch that was just prepended) grows from ~0 height to its real
+	// size, which a one-shot scrollHeight-diff correction can't account for.
+	const topAnchorRef = useRef<{
+		chatId: string;
+		messageId: string;
+		top: number;
+	} | null>(null);
 	const lastBottomScrollRef = useRef<{
 		chatId: string;
 		messageCount: number;
@@ -1325,19 +1612,62 @@ export default function Home() {
 	// yanking the view if the user had deliberately scrolled up to read
 	// something unrelated.
 	const stickToBottomRef = useRef(true);
+	// One-shot: set right before `loadOlderMessages` fires, consumed by the
+	// effect below the moment the prepended history lands — separate from
+	// `topAnchorRef` itself, which stays alive afterward so a late-loading
+	// image/video *inside* that same prepended batch can keep re-correcting
+	// via `handleMediaLoad` (see `topAnchorRef`'s own comment).
+	const pendingTopRestoreRef = useRef(false);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [newBelowCount, setNewBelowCount] = useState(0);
 	const [scrolledUp, setScrolledUp] = useState(false);
 
+	// Records `messageId`'s current on-screen position so `restoreTopAnchor`
+	// can put it back there later, after content is inserted above it.
+	function captureTopAnchor() {
+		const el = messageScrollRef.current;
+		if (!el || !active) return;
+		const firstMessage = active.messages[0];
+		if (!firstMessage) return;
+		const node = el.querySelector<HTMLElement>(
+			`[data-message-id="${firstMessage.id}"]`,
+		);
+		if (!node) return;
+		topAnchorRef.current = {
+			chatId: active.id,
+			messageId: firstMessage.id,
+			top: node.getBoundingClientRect().top,
+		};
+	}
+
+	// Re-measures the anchored message and nudges scrollTop by however much
+	// it moved — works regardless of *why* it moved (a scrollHeight-diff
+	// calculation only accounts for content inserted since the snapshot, not
+	// content above the anchor that keeps growing afterward, e.g. an image
+	// finishing its load a moment later).
+	function restoreTopAnchor() {
+		const el = messageScrollRef.current;
+		const anchor = topAnchorRef.current;
+		if (!el || !anchor || !active || anchor.chatId !== active.id) return;
+		const node = el.querySelector<HTMLElement>(
+			`[data-message-id="${anchor.messageId}"]`,
+		);
+		if (!node) return;
+		const newTop = node.getBoundingClientRect().top;
+		el.scrollTop += newTop - anchor.top;
+		anchor.top = newTop;
+	}
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: restoreTopAnchor is a plain function redeclared every render, not state — depending on active (which actually changes) is what should drive this effect
 	useEffect(() => {
 		const el = messageScrollRef.current;
 		if (!el || !active) return;
 
-		if (pendingScrollAdjustRef.current !== null) {
+		if (pendingTopRestoreRef.current) {
 			// Older history was just prepended — keep the messages the user
 			// was looking at in the same visual spot instead of jumping.
-			el.scrollTop += el.scrollHeight - pendingScrollAdjustRef.current;
-			pendingScrollAdjustRef.current = null;
+			pendingTopRestoreRef.current = false;
+			restoreTopAnchor();
 			stickToBottomRef.current = false;
 			lastBottomScrollRef.current = {
 				chatId: active.id,
@@ -1380,11 +1710,17 @@ export default function Home() {
 		};
 	}, [active]);
 
-	// Bound to every media bubble's onLoad/onLoadedMetadata — re-snaps to the
-	// bottom once a just-loaded image/video's real height is known, but only
-	// if the view was already stuck to the bottom (see stickToBottomRef).
+	// Bound to every media bubble's onLoad/onLoadedMetadata — a bubble has
+	// ~0 height until its bytes finish loading, so whichever direction the
+	// view is anchored to needs to re-snap once that settles: re-snaps to
+	// the bottom if the view was stuck there, otherwise re-corrects against
+	// the top anchor (see topAnchorRef) so a late-loading image inside a
+	// just-prepended older batch doesn't shove the current view down.
 	function handleMediaLoad() {
-		if (!stickToBottomRef.current) return;
+		if (!stickToBottomRef.current) {
+			requestAnimationFrame(restoreTopAnchor);
+			return;
+		}
 		requestAnimationFrame(() => {
 			const el = messageScrollRef.current;
 			if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
@@ -1399,8 +1735,9 @@ export default function Home() {
 		if (nearBottom) setNewBelowCount(0);
 		if (!active || loadingOlder || !active.hasMoreHistory || el.scrollTop > 80)
 			return;
+		captureTopAnchor();
+		pendingTopRestoreRef.current = true;
 		setLoadingOlder(true);
-		pendingScrollAdjustRef.current = el.scrollHeight;
 		void session
 			.loadOlderMessages(active.id)
 			.finally(() => setLoadingOlder(false));
@@ -1677,7 +2014,12 @@ export default function Home() {
 
 	function selectConversation(id: string) {
 		setActiveId(id);
+		setNavBackId(null);
 		setMobileListOpen(false);
+		setChatSearchOpen(false);
+		setChatSearchQuery("");
+		setChatSearchIndex(0);
+		setPinnedIndex(0);
 		setReplyTo(null);
 		setLightboxId(null);
 		setEditing(null);
@@ -1773,18 +2115,24 @@ export default function Home() {
 	// that original sender — reuses the existing chat if one's already open
 	// locally, otherwise goes through the normal lookup+create flow.
 	async function openForwardedFromChat(userId: string, username: string) {
+		const fromId = activeId;
 		const existing = session.conversations.find(
 			(c) => c.otherUserId === userId,
 		);
 		if (existing) {
+			if (existing.id === fromId) return;
 			selectConversation(existing.id);
+			setNavBackId(fromId);
 			return;
 		}
 		const result = await session.startChat(username);
-		if (result.ok) selectConversation(result.chatId);
+		if (result.ok) {
+			selectConversation(result.chatId);
+			setNavBackId(fromId);
+		}
 	}
 
-	async function handleForwardPick(destChatId: string) {
+	async function handleForwardPick(destChatId: string, comment: string) {
 		if (!forwarding) return;
 		setForwardBusy(true);
 		setForwardError(null);
@@ -1794,8 +2142,13 @@ export default function Home() {
 			destChatId,
 		);
 		setForwardBusy(false);
-		if (result.ok) setForwarding(null);
-		else setForwardError(result.error);
+		if (!result.ok) {
+			setForwardError(result.error);
+			return;
+		}
+		const trimmedComment = comment.trim();
+		if (trimmedComment) session.sendMessage(destChatId, trimmedComment);
+		setForwarding(null);
 	}
 
 	async function handleCreateGroup(input: {
@@ -1908,13 +2261,6 @@ export default function Home() {
 				>
 					<Settings2 size={19} />
 				</button>
-				<a className="brand" href="#home" aria-label="MW">
-					<span className="brand-mark">
-						<Ear size={21} strokeWidth={2} />
-						<span className="whisper-waves" aria-hidden="true" />
-					</span>
-					<span className="brand-initials">MW</span>
-				</a>
 				<button
 					type="button"
 					className={`icon-button ${savedMessagesPinned ? "settings-trigger-active" : ""}`}
@@ -2266,6 +2612,21 @@ export default function Home() {
 								>
 									<Menu size={20} />
 								</button>
+								{navBackId && navBackId !== active.id && (
+									<button
+										type="button"
+										className="icon-button"
+										title="Back"
+										aria-label="Back"
+										onClick={() => {
+											const backTo = navBackId;
+											setNavBackId(null);
+											if (backTo) selectConversation(backTo);
+										}}
+									>
+										<ArrowLeft size={18} />
+									</button>
+								)}
 								<button
 									type="button"
 									className="chat-person"
@@ -2325,6 +2686,19 @@ export default function Home() {
 										</button>
 									)}
 								<div className="header-actions">
+									<button
+										type="button"
+										className={`icon-button ${chatSearchOpen ? "settings-trigger-active" : ""}`}
+										title="Search messages"
+										aria-label="Search messages"
+										onClick={() => {
+											setChatSearchOpen((open) => !open);
+											setChatSearchQuery("");
+											setChatSearchIndex(0);
+										}}
+									>
+										<Search size={18} />
+									</button>
 									{!active.isSelf && !active.isGroup && !active.isChannel && (
 										<>
 											<button
@@ -2450,6 +2824,111 @@ export default function Home() {
 								</div>
 							</header>
 
+							{chatSearchOpen ? (
+								<div className="chat-search-bar">
+									<label className="search-field chat-search-field">
+										<Search size={16} />
+										<input
+											value={chatSearchQuery}
+											onChange={(event) => {
+												setChatSearchQuery(event.target.value);
+												setChatSearchIndex(0);
+											}}
+											onKeyDown={(event) => {
+												if (event.key === "Enter") jumpToSearchMatch(1);
+												if (event.key === "Escape") setChatSearchOpen(false);
+											}}
+											placeholder="Search in this chat"
+										/>
+										{chatSearchQuery && (
+											<button
+												type="button"
+												className="search-field-clear"
+												onClick={() => {
+													setChatSearchQuery("");
+													setChatSearchIndex(0);
+												}}
+												aria-label="Clear search"
+											>
+												<X size={15} />
+											</button>
+										)}
+									</label>
+									<span className="chat-search-count">
+										{trimmedChatSearchQuery
+											? `${chatSearchMatches.length ? clampedChatSearchIndex + 1 : 0}/${chatSearchMatches.length}`
+											: ""}
+									</span>
+									<button
+										type="button"
+										className="icon-button"
+										aria-label="Previous match"
+										disabled={chatSearchMatches.length === 0}
+										onClick={() => jumpToSearchMatch(-1)}
+									>
+										<ChevronUp size={16} />
+									</button>
+									<button
+										type="button"
+										className="icon-button"
+										aria-label="Next match"
+										disabled={chatSearchMatches.length === 0}
+										onClick={() => jumpToSearchMatch(1)}
+									>
+										<ChevronDown size={16} />
+									</button>
+									<button
+										type="button"
+										className="icon-button"
+										aria-label="Close search"
+										onClick={() => setChatSearchOpen(false)}
+									>
+										<X size={16} />
+									</button>
+								</div>
+							) : (
+								activePinnedMessage && (
+									<div className="pinned-message-bar">
+										<button
+											type="button"
+											className="pinned-message-jump"
+											onClick={jumpToPinnedMessage}
+										>
+											<Pin size={14} />
+											<span className="pinned-message-copy">
+												<strong>Pinned message</strong>
+												<span className="pinned-message-text">
+													{activePinnedMessage.deleted
+														? "Message deleted"
+														: activePinnedMessage.media &&
+																!activePinnedMessage.text
+															? mediaKindLabel(activePinnedMessage.media.kind)
+															: stripFormatting(activePinnedMessage.text)}
+												</span>
+											</span>
+											{pinnedMessages.length > 1 && (
+												<span className="pinned-message-count">
+													{clampedPinnedIndex + 1}/{pinnedMessages.length}
+												</span>
+											)}
+										</button>
+										<button
+											type="button"
+											className="icon-button"
+											aria-label="Unpin message"
+											onClick={() =>
+												void session.unpinMessage(
+													active.id,
+													activePinnedMessage.id,
+												)
+											}
+										>
+											<X size={14} />
+										</button>
+									</div>
+								)
+							)}
+
 							<div
 								className="message-scroll"
 								ref={messageScrollRef}
@@ -2574,6 +3053,29 @@ export default function Home() {
 														>
 															<Forward size={14} />
 														</button>
+														<button
+															type="button"
+															className="icon-button message-action"
+															aria-label={
+																message.pinned ? "Unpin message" : "Pin message"
+															}
+															onClick={() => {
+																if (message.pinned) {
+																	void session.unpinMessage(
+																		active.id,
+																		message.id,
+																	);
+																} else {
+																	void session.pinMessage(active.id, message);
+																}
+															}}
+														>
+															{message.pinned ? (
+																<PinOff size={14} />
+															) : (
+																<Pin size={14} />
+															)}
+														</button>
 														{message.fromMe && (
 															<button
 																type="button"
@@ -2688,6 +3190,20 @@ export default function Home() {
 																			{message.text && (
 																				<FormattedText text={message.text} />
 																			)}
+																			{!message.deleted &&
+																				(() => {
+																					const previewUrl = message.text
+																						? extractFirstUrl(message.text)
+																						: null;
+																					return previewUrl ? (
+																						<LinkPreviewCard
+																							url={previewUrl}
+																							getLinkPreview={
+																								session.getLinkPreview
+																							}
+																						/>
+																					) : null;
+																				})()}
 																		</>
 																	)}
 																	<span className="message-meta">
@@ -3288,6 +3804,46 @@ export default function Home() {
 								</span>
 								<ChevronRight size={16} className="settings-field-chevron" />
 							</button>
+							<div className="settings-field">
+								<span className="settings-field-label">
+									<span className="settings-field-icon">
+										<Type size={15} />
+									</span>
+									<span className="settings-field-text">
+										<strong>Text size</strong>
+										<small>Scales every chat and menu text</small>
+									</span>
+								</span>
+								<span className="text-size-stepper">
+									<button
+										type="button"
+										className="icon-button"
+										aria-label="Decrease text size"
+										disabled={textScale <= TEXT_SCALE_MIN}
+										onClick={() =>
+											setTextScale((current) =>
+												Math.max(TEXT_SCALE_MIN, current - TEXT_SCALE_STEP),
+											)
+										}
+									>
+										<Minus size={14} />
+									</button>
+									<span className="text-size-value">{textScale}%</span>
+									<button
+										type="button"
+										className="icon-button"
+										aria-label="Increase text size"
+										disabled={textScale >= TEXT_SCALE_MAX}
+										onClick={() =>
+											setTextScale((current) =>
+												Math.min(TEXT_SCALE_MAX, current + TEXT_SCALE_STEP),
+											)
+										}
+									>
+										<Plus size={14} />
+									</button>
+								</span>
+							</div>
 							<button
 								type="button"
 								className="settings-field settings-field-button"
@@ -3370,7 +3926,9 @@ export default function Home() {
 					conversations={conversations}
 					busy={forwardBusy}
 					error={forwardError}
-					onPick={(destChatId) => void handleForwardPick(destChatId)}
+					onPick={(destChatId, comment) =>
+						void handleForwardPick(destChatId, comment)
+					}
 					onClose={() => setForwarding(null)}
 				/>
 			)}
@@ -3548,17 +4106,33 @@ export default function Home() {
 							</section>
 						)}
 						<section className="settings-section">
-							<div className="settings-section-title">
-								<span className="settings-section-icon">
-									<Users size={16} />
-								</span>
-								<div>
-									<h3>{active.isChannel ? "Subscribers" : "Members"}</h3>
-									<p>{groupMembers.length}</p>
-								</div>
-							</div>
+							<label className="search-field group-info-member-search">
+								<Search size={16} />
+								<input
+									value={groupMemberQuery}
+									onChange={(event) => setGroupMemberQuery(event.target.value)}
+									placeholder={
+										active.isChannel ? "Search subscribers" : "Search members"
+									}
+								/>
+								{groupMemberQuery && (
+									<button
+										type="button"
+										className="search-field-clear"
+										onClick={() => setGroupMemberQuery("")}
+										aria-label="Clear search"
+									>
+										<X size={15} />
+									</button>
+								)}
+							</label>
 							<ul className="group-info-member-list">
-								{groupMembers.map((member) => (
+								{filteredGroupMembers.length === 0 && (
+									<li className="forward-list-empty">
+										No {active.isChannel ? "subscribers" : "members"} found.
+									</li>
+								)}
+								{filteredGroupMembers.map((member) => (
 									<li key={member.userId} className="forward-list-item">
 										<span
 											className={`avatar avatar-${colorForUsername(member.username)}`}

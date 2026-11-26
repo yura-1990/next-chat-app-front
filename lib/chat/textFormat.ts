@@ -140,6 +140,99 @@ export function trimFormattedText(text: string): string {
 	return kept.join("\n");
 }
 
+// Deliberately excludes a trailing run of common sentence/bracket
+// punctuation from the match itself, so "see https://example.com." or
+// "(https://example.com)" link just the URL, not the closing character
+// that's clearly part of the surrounding sentence rather than the URL.
+const URL_PATTERN = /https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]}]/g;
+
+// Single-backtick inline code span — `like this`. Excludes newlines so a
+// stray unmatched backtick can't swallow the rest of the message.
+const INLINE_CODE_PATTERN = /`([^`\n]+)`/g;
+
+export type TextPart = { text: string; url?: string; code?: boolean };
+
+/** Splits text into plain-text, URL, and inline-code parts, in order. A
+ * code part is never linkified or run through URL matching — it's shown
+ * verbatim (as plain text content, never interpreted/evaluated) with a
+ * click-to-copy affordance, same as a fenced code block. */
+export function splitLinks(text: string): TextPart[] {
+	const parts: TextPart[] = [];
+	let lastIndex = 0;
+	for (const match of text.matchAll(INLINE_CODE_PATTERN)) {
+		const index = match.index ?? 0;
+		if (index > lastIndex) {
+			parts.push(...splitUrls(text.slice(lastIndex, index)));
+		}
+		parts.push({ text: match[1], code: true });
+		lastIndex = index + match[0].length;
+	}
+	if (lastIndex < text.length) parts.push(...splitUrls(text.slice(lastIndex)));
+	return parts;
+}
+
+function splitUrls(text: string): TextPart[] {
+	const parts: TextPart[] = [];
+	let lastIndex = 0;
+	for (const match of text.matchAll(URL_PATTERN)) {
+		const index = match.index ?? 0;
+		if (index > lastIndex) parts.push({ text: text.slice(lastIndex, index) });
+		parts.push({ text: match[0], url: match[0] });
+		lastIndex = index + match[0].length;
+	}
+	if (lastIndex < text.length) parts.push({ text: text.slice(lastIndex) });
+	return parts;
+}
+
+// Triple-backtick fenced code block, with an optional language tag on the
+// opening fence — ```js\n...\n``` — same convention as GitHub/Telegram.
+// The language group only matches when it's followed by a real newline
+// (a dedicated first line), so a single-line fence like ```salom``` with
+// nothing before the closing backticks is never misread as "language
+// salom, empty body" — it's just the code "salom" with no language.
+const FENCE_PATTERN = /```(?:([^\n`]*)\n)?([\s\S]*?)```/g;
+
+export type FormattedSegment =
+	| { type: "text"; text: string }
+	| { type: "code"; code: string; lang: string | null };
+
+/** Splits a whole message blob into plain-text segments (further parsed
+ * line-by-line for alignment/bold/italic/links/inline-code) and fenced
+ * code-block segments, which are rendered verbatim and never re-parsed —
+ * a `**bold**` marker or a URL sitting inside someone's pasted code stays
+ * literal text, exactly as typed. */
+export function splitCodeBlocks(text: string): FormattedSegment[] {
+	const segments: FormattedSegment[] = [];
+	let lastIndex = 0;
+	for (const match of text.matchAll(FENCE_PATTERN)) {
+		const index = match.index ?? 0;
+		if (index > lastIndex) {
+			segments.push({ type: "text", text: text.slice(lastIndex, index) });
+		}
+		segments.push({
+			type: "code",
+			code: match[2].replace(/\n$/, ""),
+			lang: match[1]?.trim() || null,
+		});
+		lastIndex = index + match[0].length;
+	}
+	if (lastIndex < text.length) {
+		segments.push({ type: "text", text: text.slice(lastIndex) });
+	}
+	return segments;
+}
+
+/** First URL found in text, or null — used to decide whether a message is
+ * worth fetching a link preview card for. Skips over fenced/inline code so
+ * a URL someone pasted into a code block never triggers a preview card. */
+export function extractFirstUrl(text: string): string | null {
+	const withoutCode = text
+		.replace(FENCE_PATTERN, " ")
+		.replace(INLINE_CODE_PATTERN, " ");
+	const match = withoutCode.match(URL_PATTERN);
+	return match ? match[0] : null;
+}
+
 /** Plain-text rendering for contexts that show a snippet rather than the
  * full message — sidebar previews, reply quotes, search matches — where
  * literal `**`/`_`/`++`/`~~` markers or an alignment tag would just look

@@ -76,6 +76,7 @@ type RawMessage = {
 	edited_at_ms: number | null;
 	deleted: boolean;
 	kind: string;
+	pinned: boolean;
 };
 
 export type ChatSummary = {
@@ -147,6 +148,7 @@ export type ApiMessage = {
 	editedAtMs: number | null;
 	deleted: boolean;
 	isSystem: boolean;
+	pinned: boolean;
 };
 
 function mediaFromRaw(media: RawMedia | null): ApiMedia | null {
@@ -159,6 +161,37 @@ function mediaFromRaw(media: RawMedia | null): ApiMedia | null {
 		size: media.size,
 		durationMs: media.duration_ms,
 		url: media.url,
+	};
+}
+
+function messageFromRaw(m: RawMessage): ApiMessage {
+	return {
+		id: m.id,
+		chatId: m.chat_id,
+		authorId: m.author_id,
+		text: m.text,
+		createdAtMs: m.created_at_ms,
+		media: mediaFromRaw(m.media),
+		replyToId: m.reply_to_id,
+		replyPreview: m.reply_preview
+			? {
+					messageId: m.reply_preview.message_id,
+					authorId: m.reply_preview.author_id,
+					text: m.reply_preview.text,
+					mediaKind: m.reply_preview.media_kind,
+					deleted: m.reply_preview.deleted,
+				}
+			: null,
+		forwardedFrom: m.forwarded_from
+			? {
+					userId: m.forwarded_from.user_id,
+					username: m.forwarded_from.username,
+				}
+			: null,
+		editedAtMs: m.edited_at_ms,
+		deleted: m.deleted,
+		isSystem: m.kind === "system",
+		pinned: m.pinned,
 	};
 }
 
@@ -252,33 +285,39 @@ export async function listMessages(
 	const body = (await request(`/chats/${chatId}/messages?${params}`, {
 		token,
 	})) as RawMessage[];
-	return body.map((m) => ({
-		id: m.id,
-		chatId: m.chat_id,
-		authorId: m.author_id,
-		text: m.text,
-		createdAtMs: m.created_at_ms,
-		media: mediaFromRaw(m.media),
-		replyToId: m.reply_to_id,
-		replyPreview: m.reply_preview
-			? {
-					messageId: m.reply_preview.message_id,
-					authorId: m.reply_preview.author_id,
-					text: m.reply_preview.text,
-					mediaKind: m.reply_preview.media_kind,
-					deleted: m.reply_preview.deleted,
-				}
-			: null,
-		forwardedFrom: m.forwarded_from
-			? {
-					userId: m.forwarded_from.user_id,
-					username: m.forwarded_from.username,
-				}
-			: null,
-		editedAtMs: m.edited_at_ms,
-		deleted: m.deleted,
-		isSystem: m.kind === "system",
-	}));
+	return body.map(messageFromRaw);
+}
+
+export async function listPinnedMessages(
+	token: string,
+	chatId: string,
+): Promise<ApiMessage[]> {
+	const body = (await request(`/chats/${chatId}/pinned`, {
+		token,
+	})) as RawMessage[];
+	return body.map(messageFromRaw);
+}
+
+export async function pinMessage(
+	token: string,
+	chatId: string,
+	messageId: string,
+): Promise<void> {
+	await request(`/chats/${chatId}/messages/${messageId}/pin`, {
+		method: "POST",
+		token,
+	});
+}
+
+export async function unpinMessage(
+	token: string,
+	chatId: string,
+	messageId: string,
+): Promise<void> {
+	await request(`/chats/${chatId}/messages/${messageId}/unpin`, {
+		method: "POST",
+		token,
+	});
 }
 
 export type ApiUser = {
@@ -328,6 +367,48 @@ export async function searchUsers(
 		token,
 	})) as RawUser[];
 	return body.map(userFromRaw);
+}
+
+export type LinkPreview = {
+	url: string;
+	title: string | null;
+	description: string | null;
+	image: string | null;
+	siteName: string | null;
+};
+
+type RawLinkPreview = {
+	url: string;
+	title: string | null;
+	description: string | null;
+	image: string | null;
+	site_name: string | null;
+};
+
+// Returns null for "no preview" (unreachable link, non-HTML page, nothing
+// worth showing) rather than throwing — a missing preview is an expected,
+// routine outcome here, not an error.
+export async function getLinkPreview(
+	token: string,
+	url: string,
+): Promise<LinkPreview | null> {
+	try {
+		const body = (await request(
+			`/link-preview?url=${encodeURIComponent(url)}`,
+			{
+				token,
+			},
+		)) as RawLinkPreview;
+		return {
+			url: body.url,
+			title: body.title,
+			description: body.description,
+			image: body.image ? mediaUrl(body.image) : null,
+			siteName: body.site_name,
+		};
+	} catch {
+		return null;
+	}
 }
 
 export async function createDirectChat(token: string, withUserId: string) {

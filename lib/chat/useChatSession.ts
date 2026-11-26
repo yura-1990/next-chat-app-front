@@ -65,6 +65,10 @@ export type UIMessage = {
 	// authored chat text — rendered as a centered pill, same family as
 	// isCallEvent, but this one is a real persisted/broadcast message.
 	isSystem?: boolean;
+	// Chat-wide, not per-member — every member sees the same pin state
+	// (see `ChatService::pin_message`). Always false for a message that
+	// just arrived live; pin state only ever comes from a fetch.
+	pinned?: boolean;
 };
 
 function mediaFromProto(media: {
@@ -145,6 +149,22 @@ function forwardedFromFromApi(
 	return { userId: forwardedFrom.userId, username: forwardedFrom.username };
 }
 
+function uiMessageFromApi(m: api.ApiMessage, myUserId: string): UIMessage {
+	return {
+		id: m.id,
+		text: m.text,
+		time: formatTime(m.createdAtMs),
+		fromMe: m.authorId === myUserId,
+		media: mediaFromApi(m.media),
+		replyTo: replyToFromApi(m.replyPreview),
+		forwardedFrom: forwardedFromFromApi(m.forwardedFrom),
+		editedAtMs: m.editedAtMs ?? undefined,
+		deleted: m.deleted,
+		isSystem: m.isSystem,
+		pinned: m.pinned,
+	};
+}
+
 export type UIConversation = {
 	id: string; // chat_id
 	name: string; // other participant's username, or the group's title
@@ -155,6 +175,10 @@ export type UIConversation = {
 	time: string;
 	status: "online";
 	messages: UIMessage[];
+	// Every currently pinned message in this chat, oldest pin first — kept
+	// separately from `messages` since a pinned message can be older than
+	// anything `messages` has paged in yet (see `loadOlderMessages`).
+	pinnedMessages: UIMessage[];
 	partnerTyping: boolean;
 	hasMoreHistory: boolean;
 	unreadCount: number;
@@ -438,6 +462,7 @@ export function useChatSession() {
 					preview: existing?.preview ?? "",
 					time: existing?.time ?? "",
 					messages: existing?.messages ?? [],
+					pinnedMessages: existing?.pinnedMessages ?? [],
 					partnerTyping: existing?.partnerTyping ?? false,
 					hasMoreHistory: existing?.hasMoreHistory ?? true,
 					unreadCount: existing?.unreadCount ?? 0,
@@ -459,35 +484,52 @@ export function useChatSession() {
 		[],
 	);
 
-	const refreshChats = useCallback(async () => {
-		if (!session) return;
-		const chats = await api.listChats(session.token);
-		for (const chat of chats) {
-			upsertConversation(chat.chatId, {
-				name:
-					chat.isGroup || chat.isChannel
-						? (chat.title ?? (chat.isChannel ? "Channel" : "Group"))
-						: (chat.otherUsername ?? ""),
-				otherUserId: chat.otherUserId ?? "",
-				isSelf: chat.isSelf,
-				archived: chat.isArchived,
-				isGroup: chat.isGroup,
-				isChannel: chat.isChannel,
-				description: chat.description ?? "",
-				avatarUrl: chat.avatarUrl,
-				memberCount: chat.memberCount,
-				handle: chat.handle,
-				myRole: chat.myRole,
-				unreadCount: chat.unreadCount,
-				preview: previewTextFor(
-					chat.lastMessage?.text ?? "",
-					chat.lastMessage?.mediaKind ?? null,
-					chat.lastMessage?.deleted ?? false,
-				),
-				time: chat.lastMessage ? formatTime(chat.lastMessage.createdAtMs) : "",
-			});
-		}
-	}, [session, upsertConversation]);
+	const refreshChats = useCallback(
+		async (opts?: { notifyBacklog?: boolean }) => {
+			if (!session) return;
+			const chats = await api.listChats(session.token);
+			for (const chat of chats) {
+				upsertConversation(chat.chatId, {
+					name:
+						chat.isGroup || chat.isChannel
+							? (chat.title ?? (chat.isChannel ? "Channel" : "Group"))
+							: (chat.otherUsername ?? ""),
+					otherUserId: chat.otherUserId ?? "",
+					isSelf: chat.isSelf,
+					archived: chat.isArchived,
+					isGroup: chat.isGroup,
+					isChannel: chat.isChannel,
+					description: chat.description ?? "",
+					avatarUrl: chat.avatarUrl,
+					memberCount: chat.memberCount,
+					handle: chat.handle,
+					myRole: chat.myRole,
+					unreadCount: chat.unreadCount,
+					preview: previewTextFor(
+						chat.lastMessage?.text ?? "",
+						chat.lastMessage?.mediaKind ?? null,
+						chat.lastMessage?.deleted ?? false,
+					),
+					time: chat.lastMessage
+						? formatTime(chat.lastMessage.createdAtMs)
+						: "",
+				});
+			}
+			// Messages that arrived while this session was logged out (or the
+			// socket was dropped) never played a sound — the live-message path
+			// below only fires for messages pushed over an open WS connection.
+			// This is the catch-up: right after (re)connecting, ping once if
+			// the freshly fetched server state says there's an unread backlog,
+			// instead of leaving it as a silent badge the user has to notice.
+			if (
+				opts?.notifyBacklog &&
+				chats.some((c) => !c.isSelf && c.unreadCount > 0)
+			) {
+				playNotificationSound(soundThemeRef.current);
+			}
+		},
+		[session, upsertConversation],
+	);
 
 	// Saved Messages always exists, the same way it does in Telegram — this
 	// just makes sure it's been created (idempotent) and present in the
@@ -987,7 +1029,7 @@ export function useChatSession() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reconnect is driven by session identity, not these callbacks' identities
 	useEffect(() => {
 		if (!session) return;
-		void refreshChats();
+		void refreshChats({ notifyBacklog: true });
 		void refreshBlocked();
 		void refreshMyProfile();
 		// The gateway snapshots chat membership at Hello time, so the very
@@ -1013,18 +1055,7 @@ export function useChatSession() {
 				if (!existing) return current;
 				const byId = new Map(existing.messages.map((m) => [m.id, m]));
 				for (const m of history) {
-					byId.set(m.id, {
-						id: m.id,
-						text: m.text,
-						time: formatTime(m.createdAtMs),
-						fromMe: m.authorId === session.userId,
-						media: mediaFromApi(m.media),
-						replyTo: replyToFromApi(m.replyPreview),
-						forwardedFrom: forwardedFromFromApi(m.forwardedFrom),
-						editedAtMs: m.editedAtMs ?? undefined,
-						deleted: m.deleted,
-						isSystem: m.isSystem,
-					});
+					byId.set(m.id, uiMessageFromApi(m, session.userId));
 				}
 				const messages = [...byId.values()].sort((a, b) =>
 					compareSnowflakeIds(a.id, b.id),
@@ -1065,18 +1096,7 @@ export function useChatSession() {
 					if (!existing) return current;
 					const byId = new Map(existing.messages.map((m) => [m.id, m]));
 					for (const m of older) {
-						byId.set(m.id, {
-							id: m.id,
-							text: m.text,
-							time: formatTime(m.createdAtMs),
-							fromMe: m.authorId === session.userId,
-							media: mediaFromApi(m.media),
-							replyTo: replyToFromApi(m.replyPreview),
-							forwardedFrom: forwardedFromFromApi(m.forwardedFrom),
-							editedAtMs: m.editedAtMs ?? undefined,
-							deleted: m.deleted,
-							isSystem: m.isSystem,
-						});
+						byId.set(m.id, uiMessageFromApi(m, session.userId));
 					}
 					const messages = [...byId.values()].sort((a, b) =>
 						compareSnowflakeIds(a.id, b.id),
@@ -1092,6 +1112,111 @@ export function useChatSession() {
 				});
 			} finally {
 				loadingOlderRef.current.delete(chatId);
+			}
+		},
+		[session],
+	);
+
+	// Fetched whenever a chat becomes active (see the effect in app/page.tsx)
+	// rather than derived from `messages` — a pin can point at a message
+	// older than anything paged into `messages` yet.
+	const refreshPinnedMessages = useCallback(
+		async (chatId: string) => {
+			if (!session) return;
+			try {
+				const pinned = await api.listPinnedMessages(session.token, chatId);
+				setConversations((current) => {
+					const existing = current[chatId];
+					if (!existing) return current;
+					return {
+						...current,
+						[chatId]: {
+							...existing,
+							pinnedMessages: pinned.map((m) =>
+								uiMessageFromApi(m, session.userId),
+							),
+						},
+					};
+				});
+			} catch {
+				// non-critical — the pinned bar just stays as it was
+			}
+		},
+		[session],
+	);
+
+	const pinMessage = useCallback(
+		async (
+			chatId: string,
+			message: UIMessage,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.pinMessage(session.token, chatId, message.id);
+				setConversations((current) => {
+					const existing = current[chatId];
+					if (!existing) return current;
+					const pinnedMessages = existing.pinnedMessages.some(
+						(m) => m.id === message.id,
+					)
+						? existing.pinnedMessages
+						: [...existing.pinnedMessages, { ...message, pinned: true }];
+					return {
+						...current,
+						[chatId]: {
+							...existing,
+							pinnedMessages,
+							messages: existing.messages.map((m) =>
+								m.id === message.id ? { ...m, pinned: true } : m,
+							),
+						},
+					};
+				});
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError ? err.message : "failed to pin message",
+				};
+			}
+		},
+		[session],
+	);
+
+	const unpinMessage = useCallback(
+		async (
+			chatId: string,
+			messageId: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.unpinMessage(session.token, chatId, messageId);
+				setConversations((current) => {
+					const existing = current[chatId];
+					if (!existing) return current;
+					return {
+						...current,
+						[chatId]: {
+							...existing,
+							pinnedMessages: existing.pinnedMessages.filter(
+								(m) => m.id !== messageId,
+							),
+							messages: existing.messages.map((m) =>
+								m.id === messageId ? { ...m, pinned: false } : m,
+							),
+						},
+					};
+				});
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "failed to unpin message",
+				};
 			}
 		},
 		[session],
@@ -1465,6 +1590,14 @@ export function useChatSession() {
 			} catch {
 				return [];
 			}
+		},
+		[session],
+	);
+
+	const getLinkPreview = useCallback(
+		async (url: string) => {
+			if (!session) return null;
+			return await api.getLinkPreview(session.token, url);
 		},
 		[session],
 	);
@@ -1948,6 +2081,7 @@ export function useChatSession() {
 		activateMyAvatar,
 		deleteMyAvatar,
 		searchUsers,
+		getLinkPreview,
 		sendMessage,
 		sendMediaMessage,
 		forwardMessage,
@@ -1964,6 +2098,9 @@ export function useChatSession() {
 		notifyTyping,
 		ensureMessagesLoaded,
 		loadOlderMessages,
+		refreshPinnedMessages,
+		pinMessage,
+		unpinMessage,
 		setActiveChatId,
 		soundTheme,
 		setSoundTheme,
