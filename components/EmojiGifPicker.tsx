@@ -1,5 +1,6 @@
 "use client";
 
+import { Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis";
 import { type GifResult, searchGifs, trendingGifs } from "@/lib/chat/giphy";
@@ -103,14 +104,26 @@ export function EmojiGifPicker({ onPickEmoji, onPickGif, onClose }: Props) {
 					</>
 				) : (
 					<>
-						<input
-							className="picker-gif-search"
-							value={gifQuery}
-							onChange={(event) => setGifQuery(event.target.value)}
-							placeholder="Search GIFs…"
-							// biome-ignore lint/a11y/noAutofocus: an explicitly-opened search popover is expected to focus its search field
-							autoFocus
-						/>
+						<label className="search-field picker-gif-search">
+							<Search size={17} />
+							<input
+								value={gifQuery}
+								onChange={(event) => setGifQuery(event.target.value)}
+								placeholder="Search GIFs…"
+								// biome-ignore lint/a11y/noAutofocus: an explicitly-opened search popover is expected to focus its search field
+								autoFocus
+							/>
+							{gifQuery && (
+								<button
+									type="button"
+									className="search-field-clear"
+									onClick={() => setGifQuery("")}
+									aria-label="Clear search"
+								>
+									<X size={15} />
+								</button>
+							)}
+						</label>
 						<div className="picker-gif-grid">
 							{gifLoading && <p className="picker-gif-status">Loading…</p>}
 							{!gifLoading && gifError && (

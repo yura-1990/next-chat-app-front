@@ -213,7 +213,11 @@ export interface MessageCreated {
   replyToId: bigint;
   /** server-resolved snapshot of the replied-to message */
   replyPreview?: ReplyPreview | undefined;
-  forwardedFrom?: ForwardedFrom | undefined;
+  forwardedFrom?:
+    | ForwardedFrom
+    | undefined;
+  /** "text" (default/empty) | "system" — a server-generated notice, not authored chat text */
+  kind: string;
 }
 
 /**
@@ -1359,6 +1363,7 @@ function createBaseMessageCreated(): MessageCreated {
     replyToId: 0n,
     replyPreview: undefined,
     forwardedFrom: undefined,
+    kind: "",
   };
 }
 
@@ -1408,6 +1413,9 @@ export const MessageCreated: MessageFns<MessageCreated> = {
     }
     if (message.forwardedFrom !== undefined) {
       ForwardedFrom.encode(message.forwardedFrom, writer.uint32(82).fork()).join();
+    }
+    if (message.kind !== "") {
+      writer.uint32(90).string(message.kind);
     }
     return writer;
   },
@@ -1505,6 +1513,14 @@ export const MessageCreated: MessageFns<MessageCreated> = {
             message.forwardedFrom = ForwardedFrom.decode(reader, reader.uint32());
             continue;
           }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.kind = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1553,6 +1569,7 @@ export const MessageCreated: MessageFns<MessageCreated> = {
         : isSet(object.forwarded_from)
         ? ForwardedFrom.fromJSON(object.forwarded_from)
         : undefined,
+      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
     };
   },
 
@@ -1588,6 +1605,9 @@ export const MessageCreated: MessageFns<MessageCreated> = {
     if (message.forwardedFrom !== undefined) {
       obj.forwardedFrom = ForwardedFrom.toJSON(message.forwardedFrom);
     }
+    if (message.kind !== "") {
+      obj.kind = message.kind;
+    }
     return obj;
   },
 
@@ -1612,6 +1632,7 @@ export const MessageCreated: MessageFns<MessageCreated> = {
     message.forwardedFrom = (object.forwardedFrom !== undefined && object.forwardedFrom !== null)
       ? ForwardedFrom.fromPartial(object.forwardedFrom)
       : undefined;
+    message.kind = object.kind ?? "";
     return message;
   },
 };

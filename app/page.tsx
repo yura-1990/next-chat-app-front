@@ -9,9 +9,11 @@ import {
 	ArrowLeft,
 	Ban,
 	Bell,
+	BellOff,
 	Bold,
 	Bookmark,
 	CheckCheck,
+	ChevronRight,
 	CircleDot,
 	CircleHelp,
 	CornerUpLeft,
@@ -19,33 +21,42 @@ import {
 	Forward,
 	Image,
 	Italic,
+	Languages,
 	LogOut,
 	Maximize2,
 	Menu,
 	Mic,
+	Monitor,
+	Moon,
 	MoreHorizontal,
+	Music2,
+	Palette,
 	Paperclip,
 	Pause,
 	Pencil,
 	Phone,
+	PhoneCall,
 	Play,
+	Radio,
 	Reply,
 	Search,
 	Send,
 	Settings2,
 	ShieldAlert,
 	Smile,
+	Strikethrough,
+	Sun,
 	Trash2,
 	Underline,
+	UserPlus,
+	Users,
 	Video,
-	Volume2,
 	X,
 } from "lucide-react";
 import {
 	type ChangeEvent,
 	type FormEvent,
 	Fragment,
-	type KeyboardEvent,
 	type ReactNode,
 	type UIEvent,
 	useEffect,
@@ -53,19 +64,40 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { AccountDialog } from "@/components/AccountDialog";
 import { AuthScreen } from "@/components/AuthScreen";
+import { AvatarCarouselDialog } from "@/components/AvatarCarouselDialog";
 import { CallOverlay } from "@/components/CallOverlay";
+import { CreateChannelDialog } from "@/components/CreateChannelDialog";
+import { CreateGroupDialog } from "@/components/CreateGroupDialog";
 import { EmojiGifPicker } from "@/components/EmojiGifPicker";
 import { ForwardDialog } from "@/components/ForwardDialog";
+import { LanguageDialog } from "@/components/LanguageDialog";
 import { MediaLightbox } from "@/components/MediaLightbox";
+import {
+	RichTextEditor,
+	type RichTextEditorHandle,
+} from "@/components/RichTextEditor";
+import { SettingsPickerDialog } from "@/components/SettingsPickerDialog";
 import {
 	ACCENT_COLORS,
 	ACCENT_PALETTES,
 	type AccentColor,
 } from "@/lib/chat/accentColors";
-import { type MediaUploadKind, mediaUrl } from "@/lib/chat/api";
+import {
+	type ChannelPreview,
+	type GroupMember,
+	listGroupMembers,
+	type MediaUploadKind,
+	mediaUrl,
+} from "@/lib/chat/api";
 import type { GifResult } from "@/lib/chat/giphy";
-import { formatDuration, formatFileSize } from "@/lib/chat/presentation";
+import {
+	avatarForUsername,
+	colorForUsername,
+	formatDuration,
+	formatFileSize,
+} from "@/lib/chat/presentation";
 import {
 	playNotificationSound,
 	SOUND_THEME_LABELS,
@@ -73,11 +105,10 @@ import {
 	type SoundTheme,
 } from "@/lib/chat/sound";
 import {
-	extractAlign,
-	parseFormattedRuns,
+	parseFormattedText,
 	stripFormatting,
 	type TextAlign,
-	withAlign,
+	trimFormattedText,
 } from "@/lib/chat/textFormat";
 import type {
 	UIConversation,
@@ -141,6 +172,7 @@ type TranslationKey =
 	| "personalSpace"
 	| "today"
 	| "members"
+	| "subscribers"
 	| "lastSeen";
 
 const copy: Record<Locale, Record<TranslationKey, string>> = {
@@ -175,6 +207,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Shaxsiy makon",
 		today: "Bugun",
 		members: "aʼzo",
+		subscribers: "obunachi",
 		lastSeen: "yaqinda ko‘rilgan",
 	},
 	uzc: {
@@ -208,6 +241,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Шахсий макон",
 		today: "Бугун",
 		members: "аъзо",
+		subscribers: "обуначи",
 		lastSeen: "яқинда кўрилган",
 	},
 	en: {
@@ -241,6 +275,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Personal space",
 		today: "Today",
 		members: "members",
+		subscribers: "subscribers",
 		lastSeen: "last seen recently",
 	},
 	ru: {
@@ -274,6 +309,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Личное пространство",
 		today: "Сегодня",
 		members: "участников",
+		subscribers: "подписчиков",
 		lastSeen: "недавно был(а)",
 	},
 	de: {
@@ -307,6 +343,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Persönlicher Bereich",
 		today: "Heute",
 		members: "Mitglieder",
+		subscribers: "Abonnenten",
 		lastSeen: "zuletzt kürzlich online",
 	},
 	es: {
@@ -340,6 +377,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Espacio personal",
 		today: "Hoy",
 		members: "miembros",
+		subscribers: "suscriptores",
 		lastSeen: "visto recientemente",
 	},
 	ky: {
@@ -373,6 +411,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Жеке мейкиндик",
 		today: "Бүгүн",
 		members: "мүчө",
+		subscribers: "жазылуучу",
 		lastSeen: "жакында көрүлгөн",
 	},
 	kk: {
@@ -406,6 +445,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Жеке кеңістік",
 		today: "Бүгін",
 		members: "қатысушы",
+		subscribers: "жазылушы",
 		lastSeen: "жақында болған",
 	},
 	tg: {
@@ -439,6 +479,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Фазои шахсӣ",
 		today: "Имрӯз",
 		members: "аъзо",
+		subscribers: "обуначӣ",
 		lastSeen: "ба наздикӣ дида шуд",
 	},
 	tk: {
@@ -472,6 +513,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Şahsy giňişlik",
 		today: "Şu gün",
 		members: "agza",
+		subscribers: "abuna",
 		lastSeen: "ýakynda görüldi",
 	},
 	tr: {
@@ -505,6 +547,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Kişisel alan",
 		today: "Bugün",
 		members: "üye",
+		subscribers: "abone",
 		lastSeen: "yakın zamanda görüldü",
 	},
 	fr: {
@@ -538,6 +581,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Espace personnel",
 		today: "Aujourd'hui",
 		members: "membres",
+		subscribers: "abonnés",
 		lastSeen: "vu récemment",
 	},
 	it: {
@@ -571,6 +615,7 @@ const copy: Record<Locale, Record<TranslationKey, string>> = {
 		personalSpace: "Spazio personale",
 		today: "Oggi",
 		members: "membri",
+		subscribers: "iscritti",
 		lastSeen: "visto di recente",
 	},
 };
@@ -589,6 +634,32 @@ const localeNames: Record<Locale, string> = {
 	tr: "Türkçe",
 	fr: "Français",
 	it: "Italiano",
+};
+
+// Uzbek Latin/Cyrillic share one flag — same country, different script.
+const localeFlags: Record<Locale, string> = {
+	uz: "🇺🇿",
+	uzc: "🇺🇿",
+	en: "🇬🇧",
+	ru: "🇷🇺",
+	de: "🇩🇪",
+	es: "🇪🇸",
+	ky: "🇰🇬",
+	kk: "🇰🇿",
+	tg: "🇹🇯",
+	tk: "🇹🇲",
+	tr: "🇹🇷",
+	fr: "🇫🇷",
+	it: "🇮🇹",
+};
+
+const ACCENT_LABELS: Record<AccentColor, string> = {
+	teal: "Teal",
+	blue: "Blue",
+	coral: "Coral",
+	plum: "Plum",
+	gold: "Gold",
+	sage: "Sage",
 };
 
 const ROUND_VIDEO_MAX_MS = 60_000;
@@ -674,22 +745,29 @@ function mediaKindLabel(kind: string): string {
 }
 
 function FormattedText({ text }: { text: string }) {
-	const { align, body } = extractAlign(text);
-	const runs = parseFormattedRuns(body);
+	const lines = parseFormattedText(text);
 	return (
-		<p
-			className="message-text"
-			style={align === "left" ? undefined : { textAlign: align }}
-		>
-			{runs.map((run, index) => {
-				let node: ReactNode = run.text;
-				if (run.bold) node = <strong>{node}</strong>;
-				if (run.italic) node = <em>{node}</em>;
-				if (run.underline) node = <u>{node}</u>;
-				// biome-ignore lint/suspicious/noArrayIndexKey: runs are a static parse of the current text, not a reorderable/stateful list
-				return <Fragment key={index}>{node}</Fragment>;
-			})}
-		</p>
+		<>
+			{lines.map((line, lineIndex) => (
+				<p
+					// biome-ignore lint/suspicious/noArrayIndexKey: lines are a static parse of the current text, not a reorderable/stateful list
+					key={lineIndex}
+					className="message-text"
+					style={line.align === "left" ? undefined : { textAlign: line.align }}
+				>
+					{line.runs.length === 0 && " "}
+					{line.runs.map((run, runIndex) => {
+						let node: ReactNode = run.text;
+						if (run.bold) node = <strong>{node}</strong>;
+						if (run.italic) node = <em>{node}</em>;
+						if (run.underline) node = <u>{node}</u>;
+						if (run.strikethrough) node = <s>{node}</s>;
+						// biome-ignore lint/suspicious/noArrayIndexKey: runs are a static parse of the current text, not a reorderable/stateful list
+						return <Fragment key={runIndex}>{node}</Fragment>;
+					})}
+				</p>
+			))}
+		</>
 	);
 }
 
@@ -812,7 +890,10 @@ function MediaBubble({
 
 // Roughly 10 lines of composer text at the app's base font size/line-height
 // before the textarea stops growing and starts scrolling internally.
-const COMPOSER_MAX_HEIGHT = 208;
+// 10 lines at the composer textarea's own line-height (20px) + vertical
+// padding (13px) — kept in sync with the CSS max-height on .composer-textarea.
+const COMPOSER_MAX_HEIGHT = 213;
+const COMPOSER_AUTOGROW = { maxHeight: COMPOSER_MAX_HEIGHT };
 
 // Drag-resize range for the sidebar. The minimum stops right at avatar
 // width — narrower than that and the conversation name/preview text would
@@ -830,7 +911,12 @@ export default function Home() {
 		{ userId: string; username: string }[]
 	>([]);
 	const [draft, setDraft] = useState("");
+	// Purely a display concern now — which align button looks "pressed" for
+	// the line the caret is currently in. Alignment itself lives inline in
+	// `draft` (each line carries its own marker), so this never feeds back
+	// into serialization.
 	const [draftAlign, setDraftAlign] = useState<TextAlign>("left");
+	const draftEditorRef = useRef<RichTextEditorHandle>(null);
 	const [theme, setTheme] = useState<Theme>("system");
 	const [locale, setLocale] = useState<Locale>("en");
 	const [wallpaper, setWallpaper] = useState<Wallpaper>("waves");
@@ -871,7 +957,6 @@ export default function Home() {
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
 	const [sendingPendingMedia, setSendingPendingMedia] = useState(false);
-	const draftInputRef = useRef<HTMLTextAreaElement>(null);
 	const [replyTo, setReplyTo] = useState<UIMessage | null>(null);
 	const [forwarding, setForwarding] = useState<{
 		message: UIMessage;
@@ -879,6 +964,27 @@ export default function Home() {
 	} | null>(null);
 	const [forwardBusy, setForwardBusy] = useState(false);
 	const [forwardError, setForwardError] = useState<string | null>(null);
+	const [creatingGroupOpen, setCreatingGroupOpen] = useState(false);
+	const [createGroupBusy, setCreateGroupBusy] = useState(false);
+	const [createGroupError, setCreateGroupError] = useState<string | null>(null);
+	const [creatingChannelOpen, setCreatingChannelOpen] = useState(false);
+	const [createChannelBusy, setCreateChannelBusy] = useState(false);
+	const [createChannelError, setCreateChannelError] = useState<string | null>(
+		null,
+	);
+	const [channelSearchResult, setChannelSearchResult] =
+		useState<ChannelPreview | null>(null);
+	const [channelSearchBusy, setChannelSearchBusy] = useState(false);
+	const [groupInfoOpen, setGroupInfoOpen] = useState(false);
+	const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+	const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
+	const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+	const [avatarCarouselMediaId, setAvatarCarouselMediaId] = useState<
+		string | null
+	>(null);
+	const [activeSettingsPicker, setActiveSettingsPicker] = useState<
+		"sound" | "ringtone" | "wallpaper" | "accent" | null
+	>(null);
 	const [lightboxId, setLightboxId] = useState<string | null>(null);
 	const [lightboxLoadingOlder, setLightboxLoadingOlder] = useState(false);
 	const [editing, setEditing] = useState<{
@@ -898,6 +1004,12 @@ export default function Home() {
 		conversations.find((conversation) => conversation.id === activeId) ??
 		conversations[0] ??
 		null;
+	// A channel is a broadcast surface — only the owner/admins may post;
+	// every other chat kind has no such restriction.
+	const canPostInActiveChat =
+		!active?.isChannel ||
+		active.myRole === "owner" ||
+		active.myRole === "admin";
 	const mediaItems = useMemo(() => {
 		if (!active) return [];
 		return active.messages
@@ -944,6 +1056,31 @@ export default function Home() {
 		};
 	}, [query, session.searchUsers]);
 
+	// The same "search for everything" box also finds a public channel by
+	// its exact @handle — there's no separate "join a channel" entry point,
+	// this is it. Harmless to attempt on every query (a 404-equivalent
+	// null just means no channel has that handle).
+	useEffect(() => {
+		const q = query.trim().replace(/^@/, "");
+		if (!q) {
+			setChannelSearchResult(null);
+			return;
+		}
+		let cancelled = false;
+		setChannelSearchBusy(true);
+		const timeout = setTimeout(async () => {
+			const result = await session.findChannelByHandle(q);
+			if (!cancelled) {
+				setChannelSearchResult(result);
+				setChannelSearchBusy(false);
+			}
+		}, 250);
+		return () => {
+			cancelled = true;
+			clearTimeout(timeout);
+		};
+	}, [query, session.findChannelByHandle]);
+
 	// Global search also surfaces users you don't have a conversation with
 	// yet — Telegram shows these below your own chats instead of silently
 	// limiting "search" to chats you already started. Anyone with an
@@ -955,6 +1092,11 @@ export default function Home() {
 	const globalResults = trimmedQuery
 		? globalUserResults.filter((u) => !existingPartnerIds.has(u.userId))
 		: [];
+	const joinableChannelResult =
+		channelSearchResult &&
+		!conversations.some((c) => c.id === channelSearchResult.chatId)
+			? channelSearchResult
+			: null;
 
 	const archivedChats = conversations
 		.filter((c) => c.archived)
@@ -984,6 +1126,13 @@ export default function Home() {
 			if (conversation.isSelf && !savedMessagesPinned) return false;
 			if (!trimmedQuery) return true;
 			if (conversation.name.toLowerCase().includes(trimmedQuery)) return true;
+			if (
+				conversation.handle
+					?.toLowerCase()
+					.includes(trimmedQuery.replace(/^@/, ""))
+			) {
+				return true;
+			}
 			return conversation.messages.some(
 				(m) =>
 					!m.deleted &&
@@ -1110,6 +1259,30 @@ export default function Home() {
 			setHistoryReadyIds((current) => new Set(current).add(active.id));
 		});
 	}, [active, session.ensureMessagesLoaded]);
+
+	useEffect(() => {
+		if (
+			!groupInfoOpen ||
+			!(active?.isGroup || active?.isChannel) ||
+			!session.session
+		) {
+			setGroupMembers([]);
+			return;
+		}
+		let cancelled = false;
+		void listGroupMembers(session.session.token, active.id).then((members) => {
+			if (!cancelled) setGroupMembers(members);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		groupInfoOpen,
+		active?.isGroup,
+		active?.isChannel,
+		active?.id,
+		session.session,
+	]);
 
 	useEffect(() => {
 		session.setActiveChatId(activeId);
@@ -1241,45 +1414,28 @@ export default function Home() {
 		stickToBottomRef.current = true;
 	}
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-measuring on every draft change (not just ref identity) is the point — that's what makes the textarea grow/shrink as you type
-	useEffect(() => {
-		const el = draftInputRef.current;
-		if (!el) return;
-		el.style.height = "auto";
-		el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
-	}, [draft]);
-
-	function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-		if (event.key === "Enter" && !event.shiftKey) {
-			event.preventDefault();
-			event.currentTarget.form?.requestSubmit();
-		}
-	}
-
 	function sendMessage(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		handleSendMessage();
+	}
+
+	function handleSendMessage() {
 		if (editing) {
-			const text = draft.trim();
+			const text = trimFormattedText(draft);
 			if (!text) return;
-			session.editMessage(
-				editing.chatId,
-				editing.message.id,
-				withAlign(text, draftAlign),
-			);
+			session.editMessage(editing.chatId, editing.message.id, text);
 			setEditing(null);
 			setDraft("");
-			setDraftAlign("left");
 			return;
 		}
 		if (pendingMedia) {
 			void sendPendingMedia();
 			return;
 		}
-		const text = draft.trim();
+		const text = trimFormattedText(draft);
 		if (!text || !active) return;
-		session.sendMessage(active.id, withAlign(text, draftAlign), replyTo?.id);
+		session.sendMessage(active.id, text, replyTo?.id);
 		setDraft("");
-		setDraftAlign("left");
 		setReplyTo(null);
 	}
 
@@ -1302,8 +1458,7 @@ export default function Home() {
 
 	async function sendPendingMedia() {
 		if (!pendingMedia || !active) return;
-		const caption = draft.trim();
-		const formattedCaption = caption ? withAlign(caption, draftAlign) : caption;
+		const formattedCaption = trimFormattedText(draft);
 		setSendingPendingMedia(true);
 		try {
 			let blob: Blob;
@@ -1326,7 +1481,6 @@ export default function Home() {
 			);
 			if (result.ok) {
 				setDraft("");
-				setDraftAlign("left");
 				setReplyTo(null);
 				discardPendingMedia();
 			} else {
@@ -1343,15 +1497,12 @@ export default function Home() {
 		if (!active) return;
 		setEditing({ chatId: active.id, message });
 		setReplyTo(null);
-		const { align, body } = extractAlign(message.text);
-		setDraft(body);
-		setDraftAlign(align);
+		setDraft(message.text);
 	}
 
 	function cancelEditingMessage() {
 		setEditing(null);
 		setDraft("");
-		setDraftAlign("left");
 	}
 
 	function confirmDeleteMessage() {
@@ -1508,39 +1659,8 @@ export default function Home() {
 	}
 
 	function insertEmoji(emoji: string) {
-		const input = draftInputRef.current;
-		if (!input) {
-			setDraft((current) => current + emoji);
-			return;
-		}
-		const start = input.selectionStart ?? draft.length;
-		const end = input.selectionEnd ?? draft.length;
-		const next = draft.slice(0, start) + emoji + draft.slice(end);
-		setDraft(next);
-		requestAnimationFrame(() => {
-			input.focus();
-			const caret = start + emoji.length;
-			input.setSelectionRange(caret, caret);
-		});
-	}
-
-	function wrapSelection(marker: string) {
-		const input = draftInputRef.current;
-		if (!input) return;
-		const start = input.selectionStart ?? draft.length;
-		const end = input.selectionEnd ?? draft.length;
-		const selected = draft.slice(start, end);
-		const next = `${draft.slice(0, start)}${marker}${selected}${marker}${draft.slice(end)}`;
-		setDraft(next);
-		requestAnimationFrame(() => {
-			input.focus();
-			if (selected) {
-				input.setSelectionRange(start + marker.length, end + marker.length);
-			} else {
-				const caret = start + marker.length;
-				input.setSelectionRange(caret, caret);
-			}
-		});
+		if (draftEditorRef.current) draftEditorRef.current.insertText(emoji);
+		else setDraft((current) => current + emoji);
 	}
 
 	function pickGif(gif: GifResult) {
@@ -1678,6 +1798,78 @@ export default function Home() {
 		else setForwardError(result.error);
 	}
 
+	async function handleCreateGroup(input: {
+		title: string;
+		description: string;
+		avatarBlob: Blob | null;
+		memberUserIds: string[];
+	}) {
+		setCreateGroupBusy(true);
+		setCreateGroupError(null);
+		const result = await session.createGroup(
+			input.title,
+			input.description,
+			input.avatarBlob,
+			input.memberUserIds,
+		);
+		setCreateGroupBusy(false);
+		if (result.ok) {
+			setCreatingGroupOpen(false);
+			setActiveId(result.chatId);
+		} else {
+			setCreateGroupError(result.error);
+		}
+	}
+
+	async function handleCreateChannel(input: {
+		title: string;
+		description: string;
+		avatarBlob: Blob | null;
+		handle: string;
+		memberUserIds: string[];
+	}) {
+		setCreateChannelBusy(true);
+		setCreateChannelError(null);
+		const result = await session.createChannel(
+			input.title,
+			input.description,
+			input.avatarBlob,
+			input.handle,
+			input.memberUserIds,
+		);
+		setCreateChannelBusy(false);
+		if (result.ok) {
+			setCreatingChannelOpen(false);
+			setActiveId(result.chatId);
+		} else {
+			setCreateChannelError(result.error);
+		}
+	}
+
+	async function handleToggleChannelAdmin(userId: string, currentRole: string) {
+		if (!active) return;
+		const result =
+			currentRole === "admin"
+				? await session.demoteMember(active.id, userId)
+				: await session.promoteMember(active.id, userId);
+		if (result.ok && session.session) {
+			const members = await listGroupMembers(session.session.token, active.id);
+			setGroupMembers(members);
+		}
+	}
+
+	async function handleJoinChannelFromSearch() {
+		if (!channelSearchResult) return;
+		setChannelSearchBusy(true);
+		const result = await session.joinChannel(channelSearchResult.chatId);
+		setChannelSearchBusy(false);
+		if (result.ok) {
+			setQuery("");
+			setChannelSearchResult(null);
+			setActiveId(channelSearchResult.chatId);
+		}
+	}
+
 	async function startNewChatWith(username: string) {
 		const result = await session.startChat(username);
 		if (result.ok) {
@@ -1764,6 +1956,64 @@ export default function Home() {
 				>
 					<Ban size={19} />
 				</button>
+				<button
+					type="button"
+					className={`icon-button ${creatingGroupOpen ? "settings-trigger-active" : ""}`}
+					onClick={() => {
+						setCreateGroupError(null);
+						setCreatingGroupOpen(true);
+					}}
+					aria-label="Create group"
+					title="Create group"
+				>
+					<UserPlus size={19} />
+				</button>
+				<button
+					type="button"
+					className={`icon-button ${creatingChannelOpen ? "settings-trigger-active" : ""}`}
+					onClick={() => {
+						setCreateChannelError(null);
+						setCreatingChannelOpen(true);
+					}}
+					aria-label="Create channel"
+					title="Create channel"
+				>
+					<Radio size={19} />
+				</button>
+				<div className="header-actions-right">
+					<button
+						type="button"
+						className="icon-button"
+						onClick={() => setLanguageDialogOpen(true)}
+						aria-label={t.language}
+						title={localeNames[locale]}
+					>
+						<Languages size={19} />
+					</button>
+					<button
+						type="button"
+						className="icon-button"
+						onClick={() =>
+							setTheme((current) =>
+								current === "system"
+									? "light"
+									: current === "light"
+										? "dark"
+										: "system",
+							)
+						}
+						aria-label={t.theme}
+						title={`${t.theme}: ${theme === "system" ? t.system : theme === "light" ? t.light : t.dark}`}
+					>
+						{theme === "light" ? (
+							<Sun size={19} />
+						) : theme === "dark" ? (
+							<Moon size={19} />
+						) : (
+							<Monitor size={19} />
+						)}
+					</button>
+				</div>
 			</header>
 			<div
 				className="chat-app"
@@ -1786,7 +2036,7 @@ export default function Home() {
 						}}
 						onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
 					/>
-					<label className="search-box">
+					<label className="search-field search-box">
 						<Search size={17} />
 						<input
 							value={query}
@@ -1796,7 +2046,7 @@ export default function Home() {
 						{query && (
 							<button
 								type="button"
-								className="search-clear"
+								className="search-field-clear"
 								onClick={() => setQuery("")}
 								aria-label="Clear search"
 							>
@@ -1886,12 +2136,16 @@ export default function Home() {
 											<span
 												className={`avatar avatar-${conversation.color} ${conversation.isSelf ? "avatar-saved" : ""}`}
 											>
-												{conversation.isSelf ? (
+												{!conversation.isSelf && conversation.avatarUrl ? (
+													// biome-ignore lint/performance/noImgElement: server-optimized, cache-friendly avatar URL — next/image's optimizer has no use here
+													<img src={conversation.avatarUrl} alt="" />
+												) : conversation.isSelf ? (
 													<Bookmark size={16} />
 												) : (
 													conversation.avatar
 												)}
 												{!conversation.isSelf &&
+													!conversation.isGroup &&
 													conversation.status === "online" && (
 														<i className="online-dot" />
 													)}
@@ -1965,6 +2219,36 @@ export default function Home() {
 										))}
 									</>
 								)}
+								{joinableChannelResult && (
+									<>
+										<p className="list-kicker">Channels</p>
+										<button
+											type="button"
+											className="conversation"
+											disabled={channelSearchBusy}
+											onClick={() => void handleJoinChannelFromSearch()}
+										>
+											<span className="avatar avatar-teal">
+												{joinableChannelResult.avatarUrl ? (
+													// biome-ignore lint/performance/noImgElement: server-optimized, cache-friendly avatar URL
+													<img src={joinableChannelResult.avatarUrl} alt="" />
+												) : (
+													avatarForUsername(joinableChannelResult.title)
+												)}
+											</span>
+											<span className="conversation-copy">
+												<span className="conversation-name">
+													{joinableChannelResult.title}
+												</span>
+												<span className="conversation-preview">
+													{channelSearchBusy
+														? "Joining…"
+														: `${joinableChannelResult.memberCount} subscribers — tap to join`}
+												</span>
+											</span>
+										</button>
+									</>
+								)}
 							</>
 						)}
 					</div>
@@ -1985,19 +2269,37 @@ export default function Home() {
 								<button
 									type="button"
 									className="chat-person"
-									onClick={() => setMobileListOpen(false)}
+									onClick={() => {
+										setMobileListOpen(false);
+										if (active.isGroup || active.isChannel)
+											setGroupInfoOpen(true);
+									}}
 								>
 									<span
 										className={`avatar avatar-${active.color} ${active.isSelf ? "avatar-saved" : ""}`}
 									>
-										{active.isSelf ? <Bookmark size={18} /> : active.avatar}
-										{!active.isSelf && <i className="online-dot" />}
+										{!active.isSelf && active.avatarUrl ? (
+											// biome-ignore lint/performance/noImgElement: server-optimized, cache-friendly avatar URL — next/image's optimizer has no use here
+											<img src={active.avatarUrl} alt="" />
+										) : active.isSelf ? (
+											<Bookmark size={18} />
+										) : (
+											active.avatar
+										)}
+										{!active.isSelf && !active.isGroup && !active.isChannel && (
+											<i className="online-dot" />
+										)}
 									</span>
 									<span className="chat-person-copy">
 										<strong>
 											{active.isSelf ? "Saved Messages" : active.name}
 										</strong>
-										{active.isSelf ? (
+										{active.isGroup || active.isChannel ? (
+											<small>
+												{active.memberCount}{" "}
+												{active.isChannel ? t.subscribers : t.members}
+											</small>
+										) : active.isSelf ? (
 											<small>Notes to yourself</small>
 										) : (
 											<small>
@@ -2023,7 +2325,7 @@ export default function Home() {
 										</button>
 									)}
 								<div className="header-actions">
-									{!active.isSelf && (
+									{!active.isSelf && !active.isGroup && !active.isChannel && (
 										<>
 											<button
 												type="button"
@@ -2098,18 +2400,20 @@ export default function Home() {
 															: "Archive chat"}
 													</button>
 													{!active.isSelf && (
+														<button
+															type="button"
+															disabled={chatActionBusy}
+															onClick={() => {
+																setChatMenuOpen(false);
+																void handleDeleteChat();
+															}}
+														>
+															<X size={14} />
+															{active.isGroup ? "Leave group" : "Delete chat"}
+														</button>
+													)}
+													{!active.isSelf && !active.isGroup && (
 														<>
-															<button
-																type="button"
-																disabled={chatActionBusy}
-																onClick={() => {
-																	setChatMenuOpen(false);
-																	void handleDeleteChat();
-																}}
-															>
-																<X size={14} />
-																Delete chat
-															</button>
 															<button
 																type="button"
 																disabled={chatActionBusy}
@@ -2154,9 +2458,34 @@ export default function Home() {
 								{loadingOlder && (
 									<p className="loading-older">Loading older messages…</p>
 								)}
-								{!active.isSelf &&
+								{(active.isGroup || active.isChannel) &&
 								historyReadyIds.has(active.id) &&
 								active.messages.length === 0 ? (
+									<div className="empty-chat group-intro">
+										<span
+											className={`avatar avatar-${active.color} group-intro-avatar`}
+										>
+											{active.avatarUrl ? (
+												// biome-ignore lint/performance/noImgElement: server-optimized, cache-friendly avatar URL — next/image's optimizer has no use here
+												<img src={active.avatarUrl} alt="" />
+											) : (
+												active.avatar
+											)}
+										</span>
+										<p className="empty-chat-title">{active.name}</p>
+										<p className="group-intro-members">
+											{active.memberCount}{" "}
+											{active.isChannel ? t.subscribers : t.members}
+										</p>
+										{active.description && (
+											<FormattedText text={active.description} />
+										)}
+									</div>
+								) : !active.isSelf &&
+									!active.isGroup &&
+									!active.isChannel &&
+									historyReadyIds.has(active.id) &&
+									active.messages.length === 0 ? (
 									<div className="empty-chat">
 										<p className="empty-chat-title">
 											Say hi to {active.name} 👋
@@ -2195,9 +2524,32 @@ export default function Home() {
 														</div>
 													);
 												}
+												if (message.isSystem) {
+													return (
+														<div
+															key={message.id}
+															className="call-event-row system-event-row"
+														>
+															<Users size={11} />
+															<span>{message.text}</span>
+															<span className="call-event-time">
+																{message.time}
+															</span>
+														</div>
+													);
+												}
 												const previous = active.messages[index - 1];
+												// A channel is a single broadcast stream, not a
+												// 2-way conversation — every post (including the
+												// posting admin's own) renders in the same
+												// "incoming" style, anonymized as being from the
+												// channel rather than from them personally. Edit/
+												// delete permission below still checks the real
+												// `message.fromMe`, unaffected by this.
+												const renderAsMine =
+													message.fromMe && !active.isChannel;
 												const showAvatar =
-													!message.fromMe && (!previous || previous.fromMe);
+													!renderAsMine && (!previous || previous.fromMe);
 												const actions = !message.deleted && (
 													<div className="message-actions">
 														<button
@@ -2250,9 +2602,9 @@ export default function Home() {
 													<div
 														key={message.id}
 														data-message-id={message.id}
-														className={`message-row ${message.fromMe ? "message-row-mine" : ""} ${showAvatar ? "message-row-first" : ""}`}
+														className={`message-row ${renderAsMine ? "message-row-mine" : ""} ${showAvatar ? "message-row-first" : ""}`}
 													>
-														{message.fromMe && actions}
+														{renderAsMine && actions}
 														{(() => {
 															const isSticker =
 																!message.deleted &&
@@ -2262,7 +2614,7 @@ export default function Home() {
 																isEmojiOnlyMessage(message.text);
 															return (
 																<div
-																	className={`message-bubble ${message.fromMe ? "bubble-mine" : ""} ${message.deleted ? "bubble-deleted" : ""} ${isSticker ? "message-sticker" : ""} ${message.media ? `bubble-has-media bubble-media-${message.media.kind}` : ""}`}
+																	className={`message-bubble ${renderAsMine ? "bubble-mine" : ""} ${message.deleted ? "bubble-deleted" : ""} ${isSticker ? "message-sticker" : ""} ${message.media ? `bubble-has-media bubble-media-${message.media.kind}` : ""}`}
 																>
 																	{message.deleted ? (
 																		<p className="deleted-text">
@@ -2343,12 +2695,12 @@ export default function Home() {
 																			<span className="edited-tag">edited</span>
 																		)}
 																		{message.time}
-																		{message.fromMe && <CheckCheck size={14} />}
+																		{renderAsMine && <CheckCheck size={14} />}
 																	</span>
 																</div>
 															);
 														})()}
-														{!message.fromMe && actions}
+														{!renderAsMine && actions}
 													</div>
 												);
 											})}
@@ -2368,402 +2720,451 @@ export default function Home() {
 							</div>
 
 							<div className="composer-wrap">
-								{mediaError && (
-									<p className="media-error-banner">{mediaError}</p>
-								)}
-								{editing && (
-									<div className="reply-compose-bar">
-										<Pencil size={14} />
-										<div className="reply-compose-text">
-											<span className="reply-compose-author">
-												Editing message
-											</span>
-										</div>
-										<button
-											type="button"
-											className="icon-button"
-											onClick={cancelEditingMessage}
-											aria-label="Cancel edit"
-										>
-											<X size={16} />
-										</button>
-									</div>
-								)}
-								{replyTo && !editing && (
-									<div className="reply-compose-bar">
-										<CornerUpLeft size={14} />
-										<div className="reply-compose-text">
-											<span className="reply-compose-author">
-												{replyTo.fromMe ? "You" : active.name}
-											</span>
-											<span className="reply-compose-snippet">
-												{replyTo.media
-													? mediaKindLabel(replyTo.media.kind)
-													: stripFormatting(replyTo.text)}
-											</span>
-										</div>
-										<button
-											type="button"
-											className="icon-button"
-											onClick={() => setReplyTo(null)}
-											aria-label="Cancel reply"
-										>
-											<X size={16} />
-										</button>
-									</div>
-								)}
-								{pendingMedia && (
-									<div className="pending-media-bar">
-										{pendingMedia.kind === "voice" &&
-										pendingMedia.previewUrl ? (
-											<>
-												<span className="pending-media-icon">
-													<Mic size={18} />
-												</span>
-												{/** biome-ignore lint/a11y/useMediaCaption: a self-recorded voice message has no caption track to attach */}
-												<audio
-													src={pendingMedia.previewUrl}
-													className="pending-media-audio"
-													controls
-												/>
-											</>
-										) : pendingMedia.previewUrl ? (
-											pendingMedia.kind === "round_video" ? (
-												// biome-ignore lint/a11y/useMediaCaption: a self-recorded round video has no caption track to attach
-												<video
-													src={pendingMedia.previewUrl}
-													className="pending-media-thumb pending-media-thumb-video"
-													controls
-													playsInline
-												/>
-											) : (
-												// biome-ignore lint/performance/noImgElement: local object URL / remote preview thumbnail, next/image's optimizer has no use here
-												<img
-													src={pendingMedia.previewUrl}
-													alt=""
-													className="pending-media-thumb"
-												/>
-											)
-										) : (
-											<span className="pending-media-icon">
-												{pendingMedia.kind === "voice" ? (
-													<Mic size={18} />
+								{canPostInActiveChat ? (
+									<>
+										{mediaError && (
+											<p className="media-error-banner">{mediaError}</p>
+										)}
+										{editing && (
+											<div className="reply-compose-bar">
+												<Pencil size={14} />
+												<div className="reply-compose-text">
+													<span className="reply-compose-author">
+														Editing message
+													</span>
+												</div>
+												<button
+													type="button"
+													className="icon-button"
+													onClick={cancelEditingMessage}
+													aria-label="Cancel edit"
+												>
+													<X size={16} />
+												</button>
+											</div>
+										)}
+										{replyTo && !editing && (
+											<div className="reply-compose-bar">
+												<CornerUpLeft size={14} />
+												<div className="reply-compose-text">
+													<span className="reply-compose-author">
+														{replyTo.fromMe ? "You" : active.name}
+													</span>
+													<span className="reply-compose-snippet">
+														{replyTo.media
+															? mediaKindLabel(replyTo.media.kind)
+															: stripFormatting(replyTo.text)}
+													</span>
+												</div>
+												<button
+													type="button"
+													className="icon-button"
+													onClick={() => setReplyTo(null)}
+													aria-label="Cancel reply"
+												>
+													<X size={16} />
+												</button>
+											</div>
+										)}
+										{pendingMedia && (
+											<div className="pending-media-bar">
+												{pendingMedia.kind === "voice" &&
+												pendingMedia.previewUrl ? (
+													<>
+														<span className="pending-media-icon">
+															<Mic size={18} />
+														</span>
+														{/** biome-ignore lint/a11y/useMediaCaption: a self-recorded voice message has no caption track to attach */}
+														<audio
+															src={pendingMedia.previewUrl}
+															className="pending-media-audio"
+															controls
+														/>
+													</>
+												) : pendingMedia.previewUrl ? (
+													pendingMedia.kind === "round_video" ? (
+														// biome-ignore lint/a11y/useMediaCaption: a self-recorded round video has no caption track to attach
+														<video
+															src={pendingMedia.previewUrl}
+															className="pending-media-thumb pending-media-thumb-video"
+															controls
+															playsInline
+														/>
+													) : (
+														// biome-ignore lint/performance/noImgElement: local object URL / remote preview thumbnail, next/image's optimizer has no use here
+														<img
+															src={pendingMedia.previewUrl}
+															alt=""
+															className="pending-media-thumb"
+														/>
+													)
 												) : (
-													<Paperclip size={18} />
+													<span className="pending-media-icon">
+														{pendingMedia.kind === "voice" ? (
+															<Mic size={18} />
+														) : (
+															<Paperclip size={18} />
+														)}
+													</span>
 												)}
-											</span>
+												{pendingMedia.kind !== "voice" && (
+													<span className="pending-media-label">
+														{pendingMedia.kind === "image"
+															? "Photo"
+															: pendingMedia.kind === "round_video"
+																? "Round video"
+																: (pendingMedia.name ?? "File")}
+													</span>
+												)}
+												<button
+													type="button"
+													className="icon-button"
+													onClick={discardPendingMedia}
+													aria-label="Remove attachment"
+												>
+													<X size={16} />
+												</button>
+											</div>
 										)}
-										{pendingMedia.kind !== "voice" && (
-											<span className="pending-media-label">
-												{pendingMedia.kind === "image"
-													? "Photo"
-													: pendingMedia.kind === "round_video"
-														? "Round video"
-														: (pendingMedia.name ?? "File")}
-											</span>
+										{recording && (
+											<div className="round-record-overlay">
+												<div className="round-record-preview">
+													<video
+														ref={recordingVideoRef}
+														autoPlay
+														muted
+														playsInline
+													/>
+													<span className="round-record-dot" />
+												</div>
+												<span className="round-record-timer">
+													{formatDuration(
+														Math.floor(recording.elapsedMs / 1000),
+													)}
+												</span>
+												<button
+													type="button"
+													className="icon-button round-record-cancel"
+													onClick={() => void stopRoundVideoRecording(false)}
+													aria-label="Cancel recording"
+												>
+													<Trash2 size={18} />
+												</button>
+												<button
+													type="button"
+													className="icon-button round-record-send"
+													onClick={() => void stopRoundVideoRecording(true)}
+													aria-label={t.roundVideo}
+												>
+													<Send size={18} />
+												</button>
+											</div>
 										)}
-										<button
-											type="button"
-											className="icon-button"
-											onClick={discardPendingMedia}
-											aria-label="Remove attachment"
-										>
-											<X size={16} />
-										</button>
-									</div>
-								)}
-								{recording && (
-									<div className="round-record-overlay">
-										<div className="round-record-preview">
-											<video
-												ref={recordingVideoRef}
-												autoPlay
-												muted
-												playsInline
+										{recordingVoice && (
+											<div className="round-record-overlay">
+												<div className="voice-record-pulse">
+													<Mic size={16} />
+												</div>
+												<span className="round-record-timer">
+													{formatDuration(
+														Math.floor(recordingVoice.elapsedMs / 1000),
+													)}
+												</span>
+												<button
+													type="button"
+													className="icon-button round-record-cancel"
+													onClick={() => void stopVoiceRecording(false)}
+													aria-label="Cancel recording"
+												>
+													<Trash2 size={18} />
+												</button>
+												<button
+													type="button"
+													className="icon-button round-record-send"
+													onClick={() => void stopVoiceRecording(true)}
+													aria-label="Send voice message"
+												>
+													<Send size={18} />
+												</button>
+											</div>
+										)}
+										{pickerOpen && (
+											<EmojiGifPicker
+												onPickEmoji={(emoji) => insertEmoji(emoji)}
+												onPickGif={(gif) => pickGif(gif)}
+												onClose={() => setPickerOpen(false)}
 											/>
-											<span className="round-record-dot" />
-										</div>
-										<span className="round-record-timer">
-											{formatDuration(Math.floor(recording.elapsedMs / 1000))}
-										</span>
-										<button
-											type="button"
-											className="icon-button round-record-cancel"
-											onClick={() => void stopRoundVideoRecording(false)}
-											aria-label="Cancel recording"
-										>
-											<Trash2 size={18} />
-										</button>
-										<button
-											type="button"
-											className="icon-button round-record-send"
-											onClick={() => void stopRoundVideoRecording(true)}
-											aria-label={t.roundVideo}
-										>
-											<Send size={18} />
-										</button>
-									</div>
-								)}
-								{recordingVoice && (
-									<div className="round-record-overlay">
-										<div className="voice-record-pulse">
-											<Mic size={16} />
-										</div>
-										<span className="round-record-timer">
-											{formatDuration(
-												Math.floor(recordingVoice.elapsedMs / 1000),
-											)}
-										</span>
-										<button
-											type="button"
-											className="icon-button round-record-cancel"
-											onClick={() => void stopVoiceRecording(false)}
-											aria-label="Cancel recording"
-										>
-											<Trash2 size={18} />
-										</button>
-										<button
-											type="button"
-											className="icon-button round-record-send"
-											onClick={() => void stopVoiceRecording(true)}
-											aria-label="Send voice message"
-										>
-											<Send size={18} />
-										</button>
-									</div>
-								)}
-								{pickerOpen && (
-									<EmojiGifPicker
-										onPickEmoji={(emoji) => insertEmoji(emoji)}
-										onPickGif={(gif) => pickGif(gif)}
-										onClose={() => setPickerOpen(false)}
-									/>
-								)}
-								<input
-									ref={fileInputRef}
-									type="file"
-									className="composer-hidden-input"
-									onChange={(event) => handleFilePicked(event, "file")}
-								/>
-								<input
-									ref={imageInputRef}
-									type="file"
-									accept="image/*"
-									className="composer-hidden-input"
-									onChange={(event) => handleFilePicked(event, "image")}
-								/>
-								<form className="composer" onSubmit={sendMessage}>
-									<div className="chat-menu-wrap">
-										<button
-											type="button"
-											className="icon-button composer-tool"
-											title={t.attach}
-											aria-label={t.attach}
-											onClick={() => {
-												setRecordMenuOpen(false);
-												setAttachMenuOpen((open) => !open);
-											}}
-										>
-											<Paperclip size={19} />
-										</button>
-										{attachMenuOpen && (
-											<>
-												<button
-													type="button"
-													className="chat-menu-backdrop"
-													aria-label="Close menu"
-													onClick={() => setAttachMenuOpen(false)}
-												/>
-												<div className="chat-menu composer-popover-up">
-													<button
-														type="button"
-														onClick={() => {
-															setAttachMenuOpen(false);
-															imageInputRef.current?.click();
-														}}
-													>
-														<Image size={15} />
-														{t.photo}
-													</button>
-													<button
-														type="button"
-														onClick={() => {
-															setAttachMenuOpen(false);
-															fileInputRef.current?.click();
-														}}
-													>
-														<Paperclip size={15} />
-														{t.attach}
-													</button>
-												</div>
-											</>
 										)}
-									</div>
-									<div className="composer-input-area">
-										<div className="composer-format-bar">
-											<button
-												type="button"
-												className="icon-button format-tool"
-												title="Bold"
-												aria-label="Bold"
-												onClick={() => wrapSelection("**")}
-											>
-												<Bold size={14} />
-											</button>
-											<button
-												type="button"
-												className="icon-button format-tool"
-												title="Italic"
-												aria-label="Italic"
-												onClick={() => wrapSelection("_")}
-											>
-												<Italic size={14} />
-											</button>
-											<button
-												type="button"
-												className="icon-button format-tool"
-												title="Underline"
-												aria-label="Underline"
-												onClick={() => wrapSelection("++")}
-											>
-												<Underline size={14} />
-											</button>
-											<span className="composer-format-divider" />
-											<button
-												type="button"
-												className={`icon-button format-tool ${draftAlign === "left" ? "format-tool-active" : ""}`}
-												title="Align left"
-												aria-label="Align left"
-												onClick={() => setDraftAlign("left")}
-											>
-												<AlignLeft size={14} />
-											</button>
-											<button
-												type="button"
-												className={`icon-button format-tool ${draftAlign === "center" ? "format-tool-active" : ""}`}
-												title="Align center"
-												aria-label="Align center"
-												onClick={() => setDraftAlign("center")}
-											>
-												<AlignCenter size={14} />
-											</button>
-											<button
-												type="button"
-												className={`icon-button format-tool ${draftAlign === "right" ? "format-tool-active" : ""}`}
-												title="Align right"
-												aria-label="Align right"
-												onClick={() => setDraftAlign("right")}
-											>
-												<AlignRight size={14} />
-											</button>
-										</div>
-										<textarea
-											ref={draftInputRef}
-											aria-label={t.message}
-											rows={1}
-											className="composer-textarea"
-											style={{ textAlign: draftAlign }}
-											value={draft}
-											onChange={(event) => {
-												setDraft(event.target.value);
-												if (active) session.notifyTyping(active.id);
-											}}
-											onKeyDown={handleDraftKeyDown}
-											placeholder={
-												pendingMedia ? "Add a caption…" : t.placeholder
-											}
+										<input
+											ref={fileInputRef}
+											type="file"
+											className="composer-hidden-input"
+											onChange={(event) => handleFilePicked(event, "file")}
 										/>
-									</div>
-									<button
-										type="button"
-										className="icon-button composer-tool emoji-tool"
-										title={t.emoji}
-										aria-label={t.emoji}
-										onClick={() => setPickerOpen((open) => !open)}
-									>
-										<Smile size={19} />
-									</button>
-									<div className="chat-menu-wrap">
-										<button
-											type="button"
-											className={`icon-button composer-tool round-video-tool ${recording || recordingVoice ? "round-video-tool-active" : ""}`}
-											title={
-												recording
-													? t.roundVideo
-													: recordingVoice
-														? "Record a voice message"
-														: "Record"
-											}
-											aria-label={
-												recording
-													? t.roundVideo
-													: recordingVoice
-														? "Record a voice message"
-														: "Record"
-											}
-											onClick={() => {
-												if (recording) {
-													void stopRoundVideoRecording(true);
-													return;
-												}
-												if (recordingVoice) {
-													void stopVoiceRecording(true);
-													return;
-												}
-												setAttachMenuOpen(false);
-												setRecordMenuOpen((open) => !open);
-											}}
-										>
-											{recordingVoice ? (
-												<Mic size={19} />
-											) : (
-												<CircleDot size={19} />
-											)}
-										</button>
-										{recordMenuOpen && (
-											<>
+										<input
+											ref={imageInputRef}
+											type="file"
+											accept="image/*"
+											className="composer-hidden-input"
+											onChange={(event) => handleFilePicked(event, "image")}
+										/>
+										<form className="composer" onSubmit={sendMessage}>
+											<div className="chat-menu-wrap">
 												<button
 													type="button"
-													className="chat-menu-backdrop"
-													aria-label="Close menu"
-													onClick={() => setRecordMenuOpen(false)}
-												/>
-												<div className="chat-menu composer-popover-up">
+													className="icon-button composer-tool"
+													title={t.attach}
+													aria-label={t.attach}
+													onClick={() => {
+														setRecordMenuOpen(false);
+														setAttachMenuOpen((open) => !open);
+													}}
+												>
+													<Paperclip size={19} />
+												</button>
+												{attachMenuOpen && (
+													<>
+														<button
+															type="button"
+															className="chat-menu-backdrop"
+															aria-label="Close menu"
+															onClick={() => setAttachMenuOpen(false)}
+														/>
+														<div className="chat-menu composer-popover-up">
+															<button
+																type="button"
+																onClick={() => {
+																	setAttachMenuOpen(false);
+																	imageInputRef.current?.click();
+																}}
+															>
+																<Image size={15} />
+																{t.photo}
+															</button>
+															<button
+																type="button"
+																onClick={() => {
+																	setAttachMenuOpen(false);
+																	fileInputRef.current?.click();
+																}}
+															>
+																<Paperclip size={15} />
+																{t.attach}
+															</button>
+														</div>
+													</>
+												)}
+											</div>
+											<div className="composer-input-area">
+												<div className="composer-format-bar">
 													<button
 														type="button"
-														onClick={() => {
-															setRecordMenuOpen(false);
-															void startRoundVideoRecording();
-														}}
+														className="icon-button format-tool"
+														title="Bold"
+														aria-label="Bold"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.toggleMark("bold")
+														}
 													>
-														<CircleDot size={15} />
-														{t.roundVideo}
+														<Bold size={14} />
 													</button>
 													<button
 														type="button"
-														onClick={() => {
-															setRecordMenuOpen(false);
-															void startVoiceRecording();
-														}}
+														className="icon-button format-tool"
+														title="Italic"
+														aria-label="Italic"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.toggleMark("italic")
+														}
 													>
-														<Mic size={15} />
-														Voice message
+														<Italic size={14} />
+													</button>
+													<button
+														type="button"
+														className="icon-button format-tool"
+														title="Underline"
+														aria-label="Underline"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.toggleMark("underline")
+														}
+													>
+														<Underline size={14} />
+													</button>
+													<button
+														type="button"
+														className="icon-button format-tool"
+														title="Strikethrough"
+														aria-label="Strikethrough"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.toggleMark(
+																"strikethrough",
+															)
+														}
+													>
+														<Strikethrough size={14} />
+													</button>
+													<span className="composer-format-divider" />
+													<button
+														type="button"
+														className={`icon-button format-tool ${draftAlign === "left" ? "format-tool-active" : ""}`}
+														title="Align left"
+														aria-label="Align left"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.setAlign("left")
+														}
+													>
+														<AlignLeft size={14} />
+													</button>
+													<button
+														type="button"
+														className={`icon-button format-tool ${draftAlign === "center" ? "format-tool-active" : ""}`}
+														title="Align center"
+														aria-label="Align center"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.setAlign("center")
+														}
+													>
+														<AlignCenter size={14} />
+													</button>
+													<button
+														type="button"
+														className={`icon-button format-tool ${draftAlign === "right" ? "format-tool-active" : ""}`}
+														title="Align right"
+														aria-label="Align right"
+														onMouseDown={(event) => event.preventDefault()}
+														onClick={() =>
+															draftEditorRef.current?.setAlign("right")
+														}
+													>
+														<AlignRight size={14} />
 													</button>
 												</div>
-											</>
-										)}
+												<RichTextEditor
+													ref={draftEditorRef}
+													ariaLabel={t.message}
+													className="composer-textarea"
+													value={draft}
+													onChange={setDraft}
+													onTyping={() => {
+														if (active) session.notifyTyping(active.id);
+													}}
+													onAlignChange={setDraftAlign}
+													onEnterSubmit={handleSendMessage}
+													autoGrow={COMPOSER_AUTOGROW}
+													placeholder={
+														pendingMedia ? "Add a caption…" : t.placeholder
+													}
+												/>
+											</div>
+											<button
+												type="button"
+												className="icon-button composer-tool emoji-tool"
+												title={t.emoji}
+												aria-label={t.emoji}
+												onClick={() => setPickerOpen((open) => !open)}
+											>
+												<Smile size={19} />
+											</button>
+											<div className="chat-menu-wrap">
+												<button
+													type="button"
+													className={`icon-button composer-tool round-video-tool ${recording || recordingVoice ? "round-video-tool-active" : ""}`}
+													title={
+														recording
+															? t.roundVideo
+															: recordingVoice
+																? "Record a voice message"
+																: "Record"
+													}
+													aria-label={
+														recording
+															? t.roundVideo
+															: recordingVoice
+																? "Record a voice message"
+																: "Record"
+													}
+													onClick={() => {
+														if (recording) {
+															void stopRoundVideoRecording(true);
+															return;
+														}
+														if (recordingVoice) {
+															void stopVoiceRecording(true);
+															return;
+														}
+														setAttachMenuOpen(false);
+														setRecordMenuOpen((open) => !open);
+													}}
+												>
+													{recordingVoice ? (
+														<Mic size={19} />
+													) : (
+														<CircleDot size={19} />
+													)}
+												</button>
+												{recordMenuOpen && (
+													<>
+														<button
+															type="button"
+															className="chat-menu-backdrop"
+															aria-label="Close menu"
+															onClick={() => setRecordMenuOpen(false)}
+														/>
+														<div className="chat-menu composer-popover-up">
+															<button
+																type="button"
+																onClick={() => {
+																	setRecordMenuOpen(false);
+																	void startRoundVideoRecording();
+																}}
+															>
+																<CircleDot size={15} />
+																{t.roundVideo}
+															</button>
+															<button
+																type="button"
+																onClick={() => {
+																	setRecordMenuOpen(false);
+																	void startVoiceRecording();
+																}}
+															>
+																<Mic size={15} />
+																Voice message
+															</button>
+														</div>
+													</>
+												)}
+											</div>
+											<button
+												type="submit"
+												className="send-button"
+												aria-label={t.message}
+												disabled={
+													pendingMedia ? sendingPendingMedia : !draft.trim()
+												}
+											>
+												<Send size={17} />
+											</button>
+										</form>
+									</>
+								) : (
+									<div className="channel-readonly-bar">
+										<span>Only channel admins can post here.</span>
+										<button
+											type="button"
+											className="channel-readonly-leave"
+											onClick={() => void handleDeleteChat()}
+										>
+											Leave channel
+										</button>
 									</div>
-									<button
-										type="submit"
-										className="send-button"
-										aria-label={t.message}
-										disabled={
-											pendingMedia ? sendingPendingMedia : !draft.trim()
-										}
-									>
-										<Send size={17} />
-									</button>
-								</form>
+								)}
 							</div>
 						</>
 					) : (
@@ -2823,10 +3224,28 @@ export default function Home() {
 					/>
 					<aside className="settings-drawer" aria-label={t.settings}>
 						<div className="settings-drawer-heading">
-							<div>
-								<p className="settings-eyebrow">morrow.</p>
-								<h2>{t.settings}</h2>
-							</div>
+							<button
+								type="button"
+								className="settings-account-trigger"
+								onClick={() => setAccountDialogOpen(true)}
+							>
+								<span className="avatar avatar-profile">
+									{session.myProfile.avatarUrl ? (
+										// biome-ignore lint/performance/noImgElement: server-optimized, cache-friendly avatar URL — next/image's optimizer has no use here
+										<img src={session.myProfile.avatarUrl} alt="" />
+									) : (
+										me.username.slice(0, 2).toUpperCase()
+									)}
+								</span>
+								<span className="profile-copy">
+									<strong>{me.username}</strong>
+									<small>
+										{session.myProfile.handle
+											? `@${session.myProfile.handle}`
+											: t.personalSpace}
+									</small>
+								</span>
+							</button>
 							<button
 								type="button"
 								className="icon-button"
@@ -2836,140 +3255,76 @@ export default function Home() {
 								<X size={19} />
 							</button>
 						</div>
-						<div className="settings-account">
-							<span className="avatar avatar-profile">
-								{me.username.slice(0, 2).toUpperCase()}
-							</span>
-							<span className="profile-copy">
-								<strong>{me.username}</strong>
-								<small>{t.personalSpace}</small>
-							</span>
-						</div>
 						<section className="settings-section">
-							<div className="settings-section-title">
-								<span className="settings-section-icon">
-									<Settings2 size={16} />
+							<button
+								type="button"
+								className="settings-field settings-field-button"
+								onClick={() => setActiveSettingsPicker("sound")}
+							>
+								<span className="settings-field-label">
+									<span className="settings-field-icon">
+										<Music2 size={15} />
+									</span>
+									<span className="settings-field-text">
+										<strong>Message sound</strong>
+										<small>{SOUND_THEME_LABELS[session.soundTheme]}</small>
+									</span>
 								</span>
-								<div>
-									<h3>{t.preferences}</h3>
-									<p>{t.account}</p>
-								</div>
-							</div>
-							<label className="settings-field">
-								<span>
-									<strong>{t.theme}</strong>
-									<small>
-										{t.system}, {t.light.toLowerCase()}, {t.dark.toLowerCase()}
-									</small>
+								<ChevronRight size={16} className="settings-field-chevron" />
+							</button>
+							<button
+								type="button"
+								className="settings-field settings-field-button"
+								onClick={() => setActiveSettingsPicker("ringtone")}
+							>
+								<span className="settings-field-label">
+									<span className="settings-field-icon">
+										<PhoneCall size={15} />
+									</span>
+									<span className="settings-field-text">
+										<strong>Call ringtone</strong>
+										<small>{session.ringtoneEnabled ? "On" : "Off"}</small>
+									</span>
 								</span>
-								<select
-									value={theme}
-									onChange={(event) => setTheme(event.target.value as Theme)}
-								>
-									<option value="system">{t.system}</option>
-									<option value="light">{t.light}</option>
-									<option value="dark">{t.dark}</option>
-								</select>
-							</label>
-							<label className="settings-field">
-								<span>
-									<strong>{t.language}</strong>
-									<small>{localeNames[locale]}</small>
+								<ChevronRight size={16} className="settings-field-chevron" />
+							</button>
+							<button
+								type="button"
+								className="settings-field settings-field-button"
+								onClick={() => setActiveSettingsPicker("wallpaper")}
+							>
+								<span className="settings-field-label">
+									<span className="settings-field-icon">
+										<Image size={15} />
+									</span>
+									<span className="settings-field-text">
+										<strong>Chat background</strong>
+										<small>{WALLPAPER_LABELS[wallpaper]}</small>
+									</span>
 								</span>
-								<select
-									value={locale}
-									onChange={(event) => setLocale(event.target.value as Locale)}
-								>
-									{Object.entries(localeNames).map(([code, name]) => (
-										<option key={code} value={code}>
-											{name}
-										</option>
-									))}
-								</select>
-							</label>
-							<label className="settings-field">
-								<span>
-									<strong>Message sound</strong>
-									<small>Played when you receive a message</small>
+								<ChevronRight size={16} className="settings-field-chevron" />
+							</button>
+							<button
+								type="button"
+								className="settings-field settings-field-button"
+								onClick={() => setActiveSettingsPicker("accent")}
+							>
+								<span className="settings-field-label">
+									<span className="settings-field-icon">
+										<Palette size={15} />
+									</span>
+									<span className="settings-field-text">
+										<strong>Theme color</strong>
+										<small>{ACCENT_LABELS[accentColor]}</small>
+									</span>
 								</span>
-								<span className="sound-field-controls">
-									<select
-										value={session.soundTheme}
-										onChange={(event) =>
-											session.setSoundTheme(event.target.value as SoundTheme)
-										}
-									>
-										{SOUND_THEMES.map((themeOption) => (
-											<option key={themeOption} value={themeOption}>
-												{SOUND_THEME_LABELS[themeOption]}
-											</option>
-										))}
-									</select>
-									<button
-										type="button"
-										className="icon-button sound-preview"
-										title="Preview sound"
-										aria-label="Preview sound"
-										onClick={() => playNotificationSound(session.soundTheme)}
-									>
-										<Volume2 size={16} />
-									</button>
-								</span>
-							</label>
-							<label className="settings-field">
-								<span>
-									<strong>Call ringtone</strong>
-									<small>Played while a call is ringing</small>
-								</span>
-								<select
-									value={session.ringtoneEnabled ? "on" : "off"}
-									onChange={(event) =>
-										session.setRingtoneEnabled(event.target.value === "on")
-									}
-								>
-									<option value="on">On</option>
-									<option value="off">Off</option>
-								</select>
-							</label>
-							<label className="settings-field">
-								<span>
-									<strong>Chat background</strong>
-									<small>Pattern behind your messages</small>
-								</span>
-								<select
-									value={wallpaper}
-									onChange={(event) =>
-										setWallpaper(event.target.value as Wallpaper)
-									}
-								>
-									{WALLPAPERS.map((option) => (
-										<option key={option} value={option}>
-											{WALLPAPER_LABELS[option]}
-										</option>
-									))}
-								</select>
-							</label>
-							<div className="settings-field">
-								<span>
-									<strong>Theme color</strong>
-									<small>Accent color used throughout the app</small>
-								</span>
-								<div className="accent-swatches">
-									{ACCENT_COLORS.map((color) => (
-										<button
-											key={color}
-											type="button"
-											className={`accent-swatch ${accentColor === color ? "accent-swatch-active" : ""}`}
-											style={{
-												background: ACCENT_PALETTES[color].light.accent,
-											}}
-											aria-label={color}
-											aria-pressed={accentColor === color}
-											onClick={() => setAccentColor(color)}
-										/>
-									))}
-								</div>
-							</div>
+								<span
+									className="picker-dialog-swatch settings-field-swatch"
+									style={{
+										background: ACCENT_PALETTES[accentColor].light.accent,
+									}}
+								/>
+							</button>
 						</section>
 						<button
 							type="button"
@@ -3018,6 +3373,229 @@ export default function Home() {
 					onPick={(destChatId) => void handleForwardPick(destChatId)}
 					onClose={() => setForwarding(null)}
 				/>
+			)}
+			{creatingGroupOpen && (
+				<CreateGroupDialog
+					conversations={conversations}
+					searchUsers={session.searchUsers}
+					busy={createGroupBusy}
+					error={createGroupError}
+					onCreate={(input) => void handleCreateGroup(input)}
+					onClose={() => setCreatingGroupOpen(false)}
+				/>
+			)}
+			{creatingChannelOpen && (
+				<CreateChannelDialog
+					conversations={conversations}
+					searchUsers={session.searchUsers}
+					busy={createChannelBusy}
+					error={createChannelError}
+					onCreate={(input) => void handleCreateChannel(input)}
+					onClose={() => setCreatingChannelOpen(false)}
+				/>
+			)}
+			{accountDialogOpen && (
+				<AccountDialog
+					username={me.username}
+					handle={session.myProfile.handle}
+					bio={session.myProfile.bio}
+					avatarUrl={session.myProfile.avatarUrl}
+					listAvatars={session.listMyAvatars}
+					onUpload={session.uploadMyAvatar}
+					onSetHandle={session.setMyHandle}
+					onSetBio={session.setMyBio}
+					onOpenCarousel={(mediaId) => setAvatarCarouselMediaId(mediaId)}
+					onClose={() => setAccountDialogOpen(false)}
+				/>
+			)}
+			{avatarCarouselMediaId && (
+				<AvatarCarouselDialog
+					initialMediaId={avatarCarouselMediaId}
+					onActivate={session.activateMyAvatar}
+					onDelete={session.deleteMyAvatar}
+					onUpload={session.uploadMyAvatar}
+					onRefresh={session.listMyAvatars}
+					onClose={() => setAvatarCarouselMediaId(null)}
+				/>
+			)}
+			{languageDialogOpen && (
+				<LanguageDialog
+					options={Object.entries(localeNames).map(([code, label]) => ({
+						code,
+						label,
+						flag: localeFlags[code as Locale],
+					}))}
+					value={locale}
+					onSelect={(code) => setLocale(code as Locale)}
+					onClose={() => setLanguageDialogOpen(false)}
+				/>
+			)}
+			{activeSettingsPicker === "sound" && (
+				<SettingsPickerDialog
+					title="Message sound"
+					value={session.soundTheme}
+					onSelect={(value) => session.setSoundTheme(value as SoundTheme)}
+					onClose={() => setActiveSettingsPicker(null)}
+					options={SOUND_THEMES.map((option) => ({
+						value: option,
+						label: SOUND_THEME_LABELS[option],
+						onPreview: () => playNotificationSound(option),
+					}))}
+				/>
+			)}
+			{activeSettingsPicker === "ringtone" && (
+				<SettingsPickerDialog
+					title="Call ringtone"
+					value={session.ringtoneEnabled ? "on" : "off"}
+					onSelect={(value) => session.setRingtoneEnabled(value === "on")}
+					onClose={() => setActiveSettingsPicker(null)}
+					options={[
+						{
+							value: "on",
+							label: "On",
+							swatch: <Bell size={16} />,
+						},
+						{
+							value: "off",
+							label: "Off",
+							swatch: <BellOff size={16} />,
+						},
+					]}
+				/>
+			)}
+			{activeSettingsPicker === "wallpaper" && (
+				<SettingsPickerDialog
+					title="Chat background"
+					value={wallpaper}
+					onSelect={(value) => setWallpaper(value as Wallpaper)}
+					onClose={() => setActiveSettingsPicker(null)}
+					options={WALLPAPERS.map((option) => ({
+						value: option,
+						label: WALLPAPER_LABELS[option],
+						swatch:
+							option === "none" ? null : (
+								<span
+									className="wallpaper-swatch-thumb"
+									style={{ backgroundImage: `var(--wallpaper-${option})` }}
+								/>
+							),
+					}))}
+				/>
+			)}
+			{activeSettingsPicker === "accent" && (
+				<SettingsPickerDialog
+					title="Theme color"
+					value={accentColor}
+					onSelect={(value) => setAccentColor(value as AccentColor)}
+					onClose={() => setActiveSettingsPicker(null)}
+					options={ACCENT_COLORS.map((color) => ({
+						value: color,
+						label: ACCENT_LABELS[color],
+						swatch: (
+							<span
+								className="picker-dialog-swatch"
+								style={{ background: ACCENT_PALETTES[color].light.accent }}
+							/>
+						),
+					}))}
+				/>
+			)}
+			{groupInfoOpen && (active?.isGroup || active?.isChannel) && (
+				<>
+					<button
+						type="button"
+						className="settings-scrim"
+						onClick={() => setGroupInfoOpen(false)}
+						aria-label={t.close}
+					/>
+					<aside
+						className="settings-drawer group-info-drawer"
+						aria-label={active.isChannel ? "Channel info" : "Group info"}
+					>
+						<div className="settings-drawer-heading">
+							<h2>{active.isChannel ? "Channel info" : "Group info"}</h2>
+							<button
+								type="button"
+								className="icon-button"
+								onClick={() => setGroupInfoOpen(false)}
+								aria-label={t.close}
+							>
+								<X size={19} />
+							</button>
+						</div>
+						<div className="settings-account">
+							<span
+								className={`avatar avatar-${active.color} group-info-avatar`}
+							>
+								{active.avatarUrl ? (
+									// biome-ignore lint/performance/noImgElement: server-optimized, cache-friendly avatar URL — next/image's optimizer has no use here
+									<img src={active.avatarUrl} alt="" />
+								) : (
+									active.avatar
+								)}
+							</span>
+							<span className="profile-copy">
+								<strong>{active.name}</strong>
+								<small>
+									{active.memberCount}{" "}
+									{active.isChannel ? t.subscribers : t.members}
+								</small>
+							</span>
+						</div>
+						{active.description && (
+							<section className="settings-section group-info-description">
+								<FormattedText text={active.description} />
+							</section>
+						)}
+						<section className="settings-section">
+							<div className="settings-section-title">
+								<span className="settings-section-icon">
+									<Users size={16} />
+								</span>
+								<div>
+									<h3>{active.isChannel ? "Subscribers" : "Members"}</h3>
+									<p>{groupMembers.length}</p>
+								</div>
+							</div>
+							<ul className="group-info-member-list">
+								{groupMembers.map((member) => (
+									<li key={member.userId} className="forward-list-item">
+										<span
+											className={`avatar avatar-${colorForUsername(member.username)}`}
+										>
+											{avatarForUsername(member.username)}
+										</span>
+										<span className="forward-list-name">{member.username}</span>
+										{member.role === "owner" && (
+											<span className="group-info-role-badge">Owner</span>
+										)}
+										{member.role === "admin" && (
+											<span className="group-info-role-badge">Admin</span>
+										)}
+										{active.isChannel &&
+											active.myRole === "owner" &&
+											member.role !== "owner" && (
+												<button
+													type="button"
+													className="group-info-role-action"
+													onClick={() =>
+														void handleToggleChannelAdmin(
+															member.userId,
+															member.role,
+														)
+													}
+												>
+													{member.role === "admin"
+														? "Remove admin"
+														: "Make admin"}
+												</button>
+											)}
+									</li>
+								))}
+							</ul>
+						</section>
+					</aside>
+				</>
 			)}
 			{deleting && (
 				<div className="modal-overlay">

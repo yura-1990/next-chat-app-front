@@ -86,7 +86,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
 	font: inherit;
 }
 
@@ -96,7 +97,8 @@ button {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
@@ -283,52 +285,42 @@ select:focus-visible {
 	background: var(--accent-wash);
 }
 
-.search-box {
+/* One shared look for every search field in the app (sidebar, group/channel
+   member picker, GIF search) — icon + input + conditional clear button,
+   same height/radius/focus treatment everywhere. Each call site also keeps
+   its own class (.search-box, .create-group-search, .picker-gif-search)
+   purely for layout (margin within its own container), not appearance. */
+.search-field {
 	display: flex;
-	height: 40px;
+	height: 38px;
 	align-items: center;
 	gap: 9px;
-	margin: 0 10px 10px;
 	padding: 0 11px;
 	color: var(--subtle);
 	background: var(--panel-muted);
 	border: 1px solid transparent;
 	border-radius: 7px;
+	transition: border-color 120ms ease;
 }
 
-.search-box:focus-within {
+.search-field:focus-within {
 	border-color: var(--accent);
 }
 
-.search-box input,
-.composer input {
-	width: 100%;
-	min-width: 0;
-	color: var(--ink);
-	background: transparent;
-	border: 0;
-	outline: 0;
-}
-
-.search-box input {
-	font-size: 12px;
-}
-
-.search-box input::placeholder,
-.composer input::placeholder {
-	color: var(--subtle);
-	opacity: 1;
-}
-
-.search-clear {
+.search-field-clear {
 	display: grid;
-	width: 24px;
-	height: 24px;
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
 	place-items: center;
 	color: var(--muted);
 	background: transparent;
 	border: 0;
 	cursor: pointer;
+}
+
+.search-box {
+	margin: 0 10px 10px;
 }
 
 .sidebar-section-heading {
@@ -612,7 +604,10 @@ select:focus-visible {
 .settings-scrim {
 	position: absolute;
 	z-index: 11;
-	inset: 10px 0 0;
+	/* Starts right below .app-header (54px tall) instead of overlapping it —
+	   this is what .app-header's own 54px height/z-index:13 are reckoned
+	   against, so this must stay in sync with that value. */
+	inset: 54px 0 0;
 	background: rgb(19 30 25 / 32%);
 	border: 0;
 	cursor: pointer;
@@ -621,7 +616,7 @@ select:focus-visible {
 .settings-drawer {
 	position: absolute;
 	z-index: 12;
-	top: 15px;
+	top: 54px;
 	left: 0;
 	right: auto;
 	bottom: 0;
@@ -641,56 +636,85 @@ select:focus-visible {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 22px;
-}
-
-.settings-eyebrow {
-	margin: 0 0 5px;
-	color: var(--accent);
-	font-size: 10px;
-	font-weight: 750;
-	letter-spacing: 0.6px;
+	gap: 8px;
+	margin-bottom: 26px;
 }
 
 .settings-drawer-heading h2 {
 	margin: 0;
-	font-size: 21px;
-	font-weight: 700;
+	font-size: 22px;
+	font-weight: 750;
+	letter-spacing: -0.2px;
+}
+
+/* The main Settings drawer's heading is itself the clickable "open your
+   account" row (avatar + name + handle) — no separate "Settings" title or
+   eyebrow text, and no separate .settings-account block below it either.
+   (The group-info drawer still uses .settings-account directly, unchanged.) */
+.settings-account-trigger {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: center;
+	min-width: 0;
+	gap: 14px;
+	padding: 6px;
+	margin: -6px;
+	background: none;
+	border: 0;
+	border-radius: 10px;
+	cursor: pointer;
+	text-align: left;
+	transition: background-color 120ms ease;
+}
+
+.settings-account-trigger:hover {
+	background: var(--panel-muted);
+}
+
+.settings-account-trigger .avatar {
+	width: 50px;
+	height: 50px;
+	font-size: 14px;
 }
 
 .settings-account {
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	padding: 15px 0 20px;
+	gap: 14px;
+	padding: 4px 0 22px;
+	margin-bottom: 4px;
 	border-bottom: 1px solid var(--line);
 }
 
 .settings-account .avatar {
-	width: 45px;
-	height: 45px;
-	font-size: 12px;
+	width: 54px;
+	height: 54px;
+	box-shadow:
+		0 0 0 3px var(--panel-raised),
+		0 0 0 4px var(--line);
+	font-size: 14px;
 }
 
 .settings-section {
-	padding-top: 22px;
+	padding-top: 26px;
 }
 
 .settings-section-title {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	margin-bottom: 11px;
+	gap: 11px;
+	margin-bottom: 14px;
 }
 
 .settings-section-icon {
 	display: grid;
-	width: 33px;
-	height: 33px;
+	width: 34px;
+	height: 34px;
+	flex: 0 0 auto;
 	place-items: center;
 	color: var(--accent);
 	background: var(--accent-wash);
-	border-radius: 8px;
+	border-radius: 10px;
 }
 
 .settings-section-title h3,
@@ -699,26 +723,59 @@ select:focus-visible {
 }
 
 .settings-section-title h3 {
-	font-size: 12px;
+	font-size: 13px;
+	font-weight: 700;
 }
 
 .settings-section-title p {
-	margin-top: 3px;
+	margin-top: 2px;
 	color: var(--muted);
 	font-size: 10px;
 }
 
 .settings-field {
 	display: flex;
-	min-height: 69px;
+	min-height: 58px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 10px 0;
+	padding: 11px 10px;
+	margin: 0 -10px;
+	border-radius: 9px;
+	transition: background-color 120ms ease;
+}
+
+.settings-field:not(:last-child) {
 	border-bottom: 1px solid var(--line);
 }
 
-.settings-field > span {
+.settings-field:hover {
+	background: var(--panel-muted);
+}
+
+.settings-field:not(:last-child):hover {
+	border-bottom-color: transparent;
+}
+
+.settings-field-label {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 11px;
+}
+
+.settings-field-icon {
+	display: grid;
+	width: 30px;
+	height: 30px;
+	flex: 0 0 auto;
+	place-items: center;
+	color: var(--accent);
+	background: var(--accent-wash);
+	border-radius: 8px;
+}
+
+.settings-field-text {
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
@@ -726,71 +783,128 @@ select:focus-visible {
 }
 
 .settings-field strong {
-	font-size: 12px;
+	font-size: 12.5px;
+	font-weight: 650;
 }
 
 .settings-field small {
 	color: var(--muted);
-	font-size: 10px;
+	font-size: 10.5px;
 }
 
-.settings-field select {
-	width: 145px;
-	max-width: 48%;
-	padding: 8px 26px 8px 9px;
-	color: var(--ink);
-	background: var(--panel-muted);
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	font-size: 11px;
+/* A settings row that's now a plain button opening a picker dialog,
+   instead of holding an inline <select> — reset the button chrome so it
+   still lays out exactly like the (non-interactive) .settings-field rows
+   around it. */
+.settings-field-button {
+	width: 100%;
+	padding: 0;
+	background: none;
+	border: 0;
+	text-align: left;
+	cursor: pointer;
 }
 
-.sound-field-controls {
+.settings-field-chevron {
+	flex: 0 0 auto;
+	color: var(--subtle);
+}
+
+.settings-field-swatch {
+	width: 18px;
+	height: 18px;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+/* The header's quick-access Language/Theme icon buttons — pinned to the
+   far right of .app-header regardless of how many icons sit to the left. */
+.header-actions-right {
 	display: flex;
-	flex-direction: row;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
+	margin-left: auto;
 }
 
-.sound-field-controls select {
-	width: 110px;
-	max-width: 100%;
-	padding: 8px 26px 8px 9px;
-	color: var(--ink);
+/* Shared "icon row opens a dialog" picker — language, sound, ringtone,
+   wallpaper, and accent color all reuse this one shell. */
+.picker-dialog-card {
+	width: min(340px, 86%);
+	max-height: 75vh;
+	overflow-y: auto;
+}
+
+.picker-dialog-list {
+	max-height: 50vh;
+}
+
+.picker-dialog-row {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 6px;
+	background: none;
+	border: 0;
+	border-radius: 7px;
+	cursor: pointer;
+	text-align: left;
+}
+
+.picker-dialog-row:hover {
 	background: var(--panel-muted);
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	font-size: 11px;
 }
 
-.sound-preview {
-	width: 30px;
-	height: 30px;
+.picker-dialog-flag {
+	flex: 0 0 auto;
+	font-size: 19px;
+	line-height: 1;
+}
+
+.picker-dialog-swatch {
+	display: grid;
+	width: 26px;
+	height: 26px;
+	flex: 0 0 auto;
+	place-items: center;
+	color: var(--ink);
+	border-radius: 50%;
+}
+
+.picker-dialog-text {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.picker-dialog-sublabel {
+	color: var(--muted);
+	font-size: 10.5px;
+}
+
+.picker-dialog-preview {
+	width: 26px;
+	height: 26px;
 	flex: 0 0 auto;
 }
 
-.accent-swatches {
-	display: flex;
-	gap: 7px;
+.picker-dialog-check {
+	flex: 0 0 auto;
+	color: var(--accent);
 }
 
-.accent-swatch {
-	width: 22px;
-	height: 22px;
-	padding: 0;
-	border: 2px solid transparent;
-	border-radius: 50%;
-	cursor: pointer;
-	transition: transform 120ms ease;
-}
-
-.accent-swatch:hover {
-	transform: scale(1.12);
-}
-
-.accent-swatch-active {
-	border-color: var(--ink);
-	box-shadow: 0 0 0 2px var(--panel-raised) inset;
+.wallpaper-swatch-thumb {
+	display: block;
+	width: 26px;
+	height: 26px;
+	background-color: var(--panel-muted);
+	background-position: center;
+	background-size: cover;
+	border: 1px solid var(--line);
+	border-radius: 6px;
 }
 
 @keyframes settings-in {
@@ -1515,8 +1629,6 @@ select:focus-visible {
 .composer-wrap {
 	position: relative;
 	flex: 0 0 auto;
-	padding: 10px 7.5%;
-	background: var(--panel-raised);
 }
 
 .picker-scrim {
@@ -1621,12 +1733,6 @@ select:focus-visible {
 .picker-gif-search {
 	flex: 0 0 auto;
 	margin: 8px;
-	padding: 8px 10px;
-	color: var(--ink);
-	background: var(--panel-muted);
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	font-size: 12px;
 }
 
 .picker-gif-grid {
@@ -1663,17 +1769,20 @@ select:focus-visible {
 }
 
 .composer {
-	min-height: 44px;
+	min-height: 75px;
 	gap: 5px;
 	padding: 6px 8px;
 	background: var(--panel);
-	border: 1px solid var(--line);
-	border-radius: 9px;
-	box-shadow: 0 3px 12px rgb(37 50 47 / 4%);
+	border-top: 1px solid var(--line);
+	/* box-shadow: 0 3px 12px rgb(37 50 47 / 4%); */
 }
 
-.composer:focus-within {
-	border-color: color-mix(in srgb, var(--accent), var(--line) 40%);
+/* No outline/border change on focus or active — the composer box and its
+   textarea stay visually identical whether or not the input is focused. */
+.composer-textarea:focus-visible,
+.composer-textarea:active {
+	outline: 0;
+	border-color: inherit;
 }
 
 .composer-tool {
@@ -1696,7 +1805,11 @@ select:focus-visible {
 .composer-textarea {
 	width: 100%;
 	min-width: 0;
-	max-height: 208px;
+	/* 10 lines at this box's own line-height (20px) + its vertical padding
+	   (7px + 6px) — grows with typing up to that, then scrolls. Kept in
+	   sync with COMPOSER_MAX_HEIGHT in app/page.tsx, which enforces the
+	   same cap in JS for the auto-grow behavior. */
+	max-height: 213px;
 	padding: 7px 7px 6px;
 	overflow-y: auto;
 	color: var(--ink);
@@ -1710,11 +1823,6 @@ select:focus-visible {
 	line-height: 20px;
 	white-space: pre-wrap;
 	word-break: break-word;
-}
-
-.composer-textarea::placeholder {
-	color: var(--subtle);
-	opacity: 1;
 }
 
 .composer-format-bar {
@@ -2012,8 +2120,6 @@ select:focus-visible {
 
 	.message-scroll,
 	.composer-wrap {
-		padding-right: 5%;
-		padding-left: 5%;
 	}
 }
 
@@ -2362,16 +2468,24 @@ select:focus-visible {
 }
 
 .settings-logout {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	width: 100%;
-	padding: 10px;
-	margin-top: 18px;
+	padding: 11px;
+	margin-top: 24px;
 	color: #c4453c;
 	background: var(--panel-muted);
 	border: 0;
-	border-radius: 7px;
-	font-size: 12px;
-	font-weight: 600;
+	border-radius: 9px;
+	font-size: 12.5px;
+	font-weight: 650;
 	cursor: pointer;
+	transition: background-color 120ms ease;
+}
+
+.settings-logout:hover {
+	background: rgb(196 69 60 / 12%);
 }
 
 .call-overlay {
@@ -2692,6 +2806,7 @@ select:focus-visible {
 }
 
 .lightbox-thumb {
+	position: relative;
 	width: 48px;
 	height: 48px;
 	flex: 0 0 auto;
@@ -2803,4 +2918,480 @@ select:focus-visible {
 
 .sidebar-collapsed .conversation {
 	justify-content: center;
+}
+
+/* Any real uploaded avatar image (group avatars today) rendered inside the
+   app's usual circular .avatar badge — fills it edge to edge instead of
+   sitting inside the initials' centered grid cell. */
+.avatar img {
+	width: 100%;
+	height: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+/* A server-generated group notice ("Alice added Bob and Carol") — same
+   centered-pill family as .call-event-row, just a neutral color instead of
+   the answered/missed green/red since there's no call outcome here. */
+.system-event-row {
+	align-self: center;
+	color: var(--muted);
+	background: var(--panel-muted);
+}
+
+/* The group's own intro block (avatar, title, member count, description),
+   shown in place of the greeting stickers for a brand new, still-empty
+   group — and reused (mostly) for the group-info drawer below. */
+.group-intro {
+	max-width: 360px;
+}
+
+.group-intro-avatar,
+.group-info-avatar {
+	width: 64px;
+	height: 64px;
+	font-size: 20px;
+}
+
+.group-intro-members {
+	margin: -8px 0 0;
+	color: var(--subtle);
+	font-size: 11px;
+}
+
+.group-intro .message-text {
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+/* Group info drawer — reuses .settings-drawer/.settings-account as-is. */
+.group-info-description {
+	padding-top: 0;
+}
+
+.group-info-description .message-text {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.55;
+}
+
+.group-info-member-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.group-info-role-badge {
+	padding: 2px 8px;
+	margin-left: auto;
+	color: var(--accent);
+	background: var(--accent-wash);
+	border-radius: 20px;
+	font-size: 10px;
+	font-weight: 700;
+}
+
+.group-info-role-action {
+	margin-left: auto;
+	padding: 4px 9px;
+	color: var(--subtle);
+	background: var(--panel-muted);
+	border: 1px solid var(--line);
+	border-radius: 20px;
+	font-size: 10px;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		color 120ms ease,
+		border-color 120ms ease;
+}
+
+.group-info-role-action:hover {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent), var(--line) 55%);
+}
+
+.group-info-role-badge + .group-info-role-action {
+	margin-left: 8px;
+}
+
+/* The composer's own slot for a channel subscriber (can't post) — same
+   footprint as the real composer so the layout doesn't jump when a
+   subscriber gets promoted and the real composer takes its place. */
+.channel-readonly-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 14px;
+	color: var(--subtle);
+	font-size: 12px;
+}
+
+.channel-readonly-leave {
+	flex: 0 0 auto;
+	padding: 6px 12px;
+	color: #ff6b5e;
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: 20px;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.channel-readonly-leave:hover {
+	border-color: #ff6b5e;
+}
+
+/* Create Group dialog — reuses .modal-overlay/.modal-card/.forward-list as
+   its base shell, same convention as the forward dialog above. */
+.create-group-card {
+	width: min(380px, 90%);
+	max-height: 85vh;
+	overflow-y: auto;
+}
+
+.create-group-identity {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.create-group-avatar-picker {
+	position: relative;
+	flex: 0 0 auto;
+	padding: 0;
+	background: none;
+	border: 0;
+	border-radius: 50%;
+	cursor: pointer;
+}
+
+.create-group-avatar-picker .avatar {
+	width: 52px;
+	height: 52px;
+}
+
+.create-group-avatar-picker img {
+	width: 52px;
+	height: 52px;
+	aspect-ratio: 1 / 1;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.create-group-avatar-badge {
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	display: grid;
+	width: 20px;
+	height: 20px;
+	place-items: center;
+	color: white;
+	background: var(--accent);
+	border: 2px solid var(--panel-raised);
+	border-radius: 50%;
+}
+
+.create-group-title-input {
+	flex: 1;
+	width: auto;
+}
+
+.create-group-description {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.create-group-format-bar {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.create-group-format-bar .icon-button {
+	width: 26px;
+	height: 26px;
+}
+
+.create-group-char-count {
+	margin-left: auto;
+	color: var(--subtle);
+	font-size: 10px;
+}
+
+.create-group-description-input {
+	width: 100%;
+	padding: 10px 12px;
+	color: var(--ink);
+	background: var(--panel-muted);
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	font-size: 13px;
+	line-height: 1.45;
+	resize: none;
+	transition: border-color 120ms ease;
+	/* 10 lines at this box's own line-height (18.85px = 1.45 * 13px font)
+	   + vertical padding (10px top + 10px bottom), then it scrolls instead
+	   of growing further. */
+	max-height: 209px;
+}
+
+/* Was a textarea's `rows` attribute — a contentEditable div has no
+   equivalent, so the height floor moves here. */
+.create-group-description-input {
+	min-height: 74px;
+	overflow-y: auto;
+}
+
+.create-group-description-input:focus-visible {
+	border-color: var(--accent);
+	outline: 0;
+}
+
+.create-group-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.create-group-chip {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 10px;
+	color: var(--ink);
+	background: var(--accent-wash);
+	border: 0;
+	border-radius: 20px;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.create-group-member-list {
+	max-height: 220px;
+	overflow-y: auto;
+}
+
+/* Account dialog — identity header (avatar+name, reuses
+   .settings-account-trigger), a bare @handle editor, and a rich-text bio
+   editor (reuses .create-group-description/.create-group-format-bar from
+   the group-creation dialog). Photo management itself lives entirely in
+   the avatar carousel (see .avatar-carousel-* below), opened by clicking
+   the header avatar — nothing photo-related renders inline in this card. */
+.account-dialog-card {
+	width: min(400px, 90%);
+	max-height: 85vh;
+	overflow-y: auto;
+}
+
+/* Public handle / About are the only two sections left, so the first one
+   just gets a top divider under the identity header. */
+.account-dialog-section {
+	padding-top: 20px;
+}
+
+.account-dialog-section:first-of-type {
+	padding-top: 18px;
+	border-top: 1px solid var(--line);
+}
+
+.account-dialog-handle-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.account-dialog-handle-at {
+	display: grid;
+	flex: 0 0 auto;
+	width: 30px;
+	height: 30px;
+	place-items: center;
+	color: var(--subtle);
+	background: var(--panel-muted);
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		color 120ms ease,
+		border-color 120ms ease;
+}
+
+.account-dialog-handle-at:hover {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent), var(--line) 55%);
+}
+
+.account-dialog-handle-row input {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 9px 10px;
+	color: var(--ink);
+	background: var(--panel-muted);
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	font-size: 13px;
+}
+
+.account-dialog-handle-row input::placeholder {
+	color: var(--subtle);
+	opacity: 1;
+}
+
+.account-dialog-handle-row input:focus-visible {
+	border-color: var(--accent);
+	outline: 0;
+}
+
+/* Avatar photo carousel — reuses .lightbox-scrim/.lightbox-nav/.lightbox-stage/
+   .lightbox-image/.lightbox-close/.lightbox-footer/.lightbox-thumbs from
+   MediaLightbox as its shell (same full-screen dark viewer chrome, and the
+   photo shown at its own proportions via object-fit:contain, not force-
+   cropped to a circle — you need to see the whole photo to decide whether to
+   keep/delete it). Render order top to bottom: the "N / total" counter, the
+   swipeable stage, the icon-only action row, then the thumbnail strip —
+   pagination sits below the actions rather than above the image, and "is
+   this the active profile photo" is marked on its thumbnail with a small
+   star badge, distinct from "this is the one currently being viewed" (the
+   existing .lightbox-thumb-active accent border) since either can be true
+   without the other. */
+.avatar-carousel-counter {
+	margin-top: 0;
+	margin-bottom: 14px;
+}
+
+.avatar-carousel-swipe-stage {
+	touch-action: pan-y;
+	cursor: grab;
+}
+
+.avatar-carousel-swipe-stage:active {
+	cursor: grabbing;
+}
+
+.avatar-carousel-error {
+	margin: 10px 0 0;
+	color: #ff9d94;
+	font-size: 12px;
+}
+
+.avatar-carousel-actions {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-top: 22px;
+}
+
+.avatar-carousel-action {
+	width: 46px;
+	height: 46px;
+	color: white;
+	background: rgb(255 255 255 / 12%);
+}
+
+.avatar-carousel-action:hover {
+	background: rgb(255 255 255 / 22%);
+}
+
+.avatar-carousel-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.avatar-carousel-action-active {
+	color: var(--accent);
+	background: rgb(255 255 255 / 22%);
+}
+
+.avatar-carousel-delete:hover {
+	color: #ff6b5e;
+}
+
+.avatar-carousel-actions + .lightbox-thumbs {
+	margin-top: 18px;
+}
+
+.avatar-carousel-thumb-badge {
+	position: absolute;
+	right: 3px;
+	bottom: 3px;
+	display: grid;
+	width: 15px;
+	height: 15px;
+	place-items: center;
+	color: #0b0d0c;
+	background: var(--accent);
+	border-radius: 50%;
+}
+
+/* RichTextEditor — a contentEditable stand-in for whichever plain textarea
+   it's dropped into (composer, bio, group description), taking on that
+   context's own class (.composer-textarea etc.) for padding/font/colors.
+   Each top-level child is one paragraph line (.rte-line), independently
+   alignable — that's the whole reason this isn't just a textarea with
+   inline markers typed into it, which could only ever align as one block. */
+.rte-wrap {
+	position: relative;
+}
+
+.rte-line {
+	margin: 0;
+	min-height: 1em;
+}
+
+.rte-placeholder {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+	user-select: none;
+}
+
+/* Higher specificity than the single-class context rule (.composer-textarea
+   etc.) it's paired with, so it wins the cascade without needing
+   `!important` — add a line here for any new context this editor is
+   dropped into. */
+.rte-placeholder.composer-textarea,
+.rte-placeholder.create-group-description-input {
+	background: transparent;
+	border-color: transparent;
+	color: var(--subtle);
+}
+
+/* Qualified with the `label` element (every .search-field wrapper is one)
+   purely to win the specificity tie against generic modal/composer input
+   resets (`.modal-card input`, `.auth-field input`, etc.) — those and this
+   are each a single class plus an element selector, so without the extra
+   element qualifier here, whichever one happens to come later in the file
+   wins on source order alone and stacks its own border/background/padding
+   on top of this one wherever a search field sits inside one of those
+   containers. Kept last in the file so it's never the one being overridden
+   by a same-specificity rule defined after it. */
+label.search-field input {
+	width: 100%;
+	min-width: 0;
+	padding: 0;
+	color: var(--ink);
+	background: transparent;
+	border: 0;
+	border-radius: 0;
+	outline: 0;
+	font-size: 12.5px;
+}
+
+label.search-field input::placeholder {
+	color: var(--subtle);
+	opacity: 1;
 }

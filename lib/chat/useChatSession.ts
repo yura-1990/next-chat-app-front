@@ -61,6 +61,10 @@ export type UIMessage = {
 	// Only meaningful when isCallEvent is true: did the two of you actually
 	// connect at any point during this call, regardless of how it ended?
 	callAnswered?: boolean;
+	// A server-generated notice ("Alice added Bob and Carol") rather than
+	// authored chat text — rendered as a centered pill, same family as
+	// isCallEvent, but this one is a real persisted/broadcast message.
+	isSystem?: boolean;
 };
 
 function mediaFromProto(media: {
@@ -143,7 +147,7 @@ function forwardedFromFromApi(
 
 export type UIConversation = {
 	id: string; // chat_id
-	name: string; // other participant's username
+	name: string; // other participant's username, or the group's title
 	otherUserId: string;
 	avatar: string;
 	color: string;
@@ -160,6 +164,20 @@ export type UIConversation = {
 	// showing it as if it were a chat with another person.
 	isSelf: boolean;
 	archived: boolean;
+	isGroup: boolean;
+	// A broadcast-style chat: only owner/admin members (see `myRole`) may
+	// post; everyone else is a read-only subscriber. Mutually exclusive
+	// with `isGroup`.
+	isChannel: boolean;
+	description: string;
+	avatarUrl: string | null;
+	memberCount: number;
+	// A channel's public `@handle`, if it has one — `null` means
+	// invite-only. Always `null` for direct/self/group chats.
+	handle: string | null;
+	// This caller's own role ("owner" | "admin" | "member"), `null` for
+	// direct/self chats where role isn't tracked.
+	myRole: string | null;
 };
 
 export type CallStatus =
@@ -316,6 +334,11 @@ export function useChatSession() {
 		{},
 	);
 	const [blockedUsers, setBlockedUsers] = useState<api.BlockedUser[]>([]);
+	const [myProfile, setMyProfile] = useState<{
+		handle: string | null;
+		bio: string | null;
+		avatarUrl: string | null;
+	}>({ handle: null, bio: null, avatarUrl: null });
 
 	const clientRef = useRef<GatewayClient | null>(null);
 	const loadedChatsRef = useRef<Set<string>>(new Set());
@@ -420,6 +443,13 @@ export function useChatSession() {
 					unreadCount: existing?.unreadCount ?? 0,
 					isSelf: existing?.isSelf ?? false,
 					archived: existing?.archived ?? false,
+					isGroup: existing?.isGroup ?? false,
+					isChannel: existing?.isChannel ?? false,
+					description: existing?.description ?? "",
+					avatarUrl: existing?.avatarUrl ?? null,
+					memberCount: existing?.memberCount ?? 2,
+					handle: existing?.handle ?? null,
+					myRole: existing?.myRole ?? null,
 					...patch,
 				};
 				return { ...current, [chatId]: next };
@@ -434,10 +464,21 @@ export function useChatSession() {
 		const chats = await api.listChats(session.token);
 		for (const chat of chats) {
 			upsertConversation(chat.chatId, {
-				name: chat.otherUsername,
-				otherUserId: chat.otherUserId,
+				name:
+					chat.isGroup || chat.isChannel
+						? (chat.title ?? (chat.isChannel ? "Channel" : "Group"))
+						: (chat.otherUsername ?? ""),
+				otherUserId: chat.otherUserId ?? "",
 				isSelf: chat.isSelf,
 				archived: chat.isArchived,
+				isGroup: chat.isGroup,
+				isChannel: chat.isChannel,
+				description: chat.description ?? "",
+				avatarUrl: chat.avatarUrl,
+				memberCount: chat.memberCount,
+				handle: chat.handle,
+				myRole: chat.myRole,
+				unreadCount: chat.unreadCount,
 				preview: previewTextFor(
 					chat.lastMessage?.text ?? "",
 					chat.lastMessage?.mediaKind ?? null,
@@ -466,6 +507,16 @@ export function useChatSession() {
 			// if it already existed, or on the next successful call otherwise
 		}
 	}, [session, upsertConversation]);
+
+	const refreshMyProfile = useCallback(async () => {
+		if (!session) return;
+		try {
+			const me = await api.getMe(session.token);
+			setMyProfile({ handle: me.handle, bio: me.bio, avatarUrl: me.avatarUrl });
+		} catch {
+			// non-critical — stays stale until the next refresh
+		}
+	}, [session]);
 
 	const refreshBlocked = useCallback(async () => {
 		if (!session) return;
@@ -531,16 +582,24 @@ export function useChatSession() {
 	// Tells the hook which chat the user is currently looking at, so the
 	// message dispatcher knows not to bump its unread badge, and clears
 	// whatever badge that chat already had — opening a chat is "I've seen
-	// this" regardless of exact scroll position within it.
-	const setActiveChatId = useCallback((chatId: string | null) => {
-		activeChatIdRef.current = chatId;
-		if (!chatId) return;
-		setConversations((current) => {
-			const existing = current[chatId];
-			if (!existing || existing.unreadCount === 0) return current;
-			return { ...current, [chatId]: { ...existing, unreadCount: 0 } };
-		});
-	}, []);
+	// this" regardless of exact scroll position within it. Also persists
+	// that server-side (`markChatRead`): the optimistic local zero below is
+	// just for instant feedback, not the source of truth — without the
+	// server call, the count would come right back on the next
+	// refreshChats/reconnect, since the server never learned it was read.
+	const setActiveChatId = useCallback(
+		(chatId: string | null) => {
+			activeChatIdRef.current = chatId;
+			if (!chatId) return;
+			setConversations((current) => {
+				const existing = current[chatId];
+				if (!existing || existing.unreadCount === 0) return current;
+				return { ...current, [chatId]: { ...existing, unreadCount: 0 } };
+			});
+			if (session) void api.markChatRead(session.token, chatId);
+		},
+		[session],
+	);
 
 	const appendMessage = useCallback((chatId: string, message: UIMessage) => {
 		setConversations((current) => {
@@ -674,19 +733,30 @@ export function useChatSession() {
 						media: m.media && mediaFromProto(m.media),
 						replyTo: replyToFromProto(m.replyPreview),
 						forwardedFrom: forwardedFromFromProto(m.forwardedFrom),
+						isSystem: m.kind === "system",
 					};
 
 					if (!conversationsRef.current[chatId]) {
 						// A chat we don't know about yet (someone just
-						// started one with us) — pull the chat list and
-						// reconnect to subscribe to it; its history already
-						// has this message.
+						// started one with us, or just added us to a new
+						// group) — pull the chat list and reconnect to
+						// subscribe to it; its history already has this
+						// message.
 						void refreshChats().then(() => connectGateway(current));
 						return;
 					}
 					setPartnerTyping(chatId, false);
 					clearTimeout(typingTimeoutsRef.current[chatId]);
 					appendMessage(chatId, message);
+					if (message.isSystem) {
+						// A system notice ("X joined the channel", "Y created
+						// the group") is exactly when membership/subscriber
+						// counts can have changed for a chat we already know
+						// about — refresh the summary so memberCount stays
+						// accurate for every already-open session, not just
+						// the one that triggered the change.
+						void refreshChats();
+					}
 					if (!message.fromMe) {
 						playNotificationSound(soundThemeRef.current);
 						if (chatId !== activeChatIdRef.current) {
@@ -919,6 +989,7 @@ export function useChatSession() {
 		if (!session) return;
 		void refreshChats();
 		void refreshBlocked();
+		void refreshMyProfile();
 		// The gateway snapshots chat membership at Hello time, so the very
 		// first-ever creation of Saved Messages has to resolve *before*
 		// connecting — otherwise this connection never subscribes to it,
@@ -952,6 +1023,7 @@ export function useChatSession() {
 						forwardedFrom: forwardedFromFromApi(m.forwardedFrom),
 						editedAtMs: m.editedAtMs ?? undefined,
 						deleted: m.deleted,
+						isSystem: m.isSystem,
 					});
 				}
 				const messages = [...byId.values()].sort((a, b) =>
@@ -1003,6 +1075,7 @@ export function useChatSession() {
 							forwardedFrom: forwardedFromFromApi(m.forwardedFrom),
 							editedAtMs: m.editedAtMs ?? undefined,
 							deleted: m.deleted,
+							isSystem: m.isSystem,
 						});
 					}
 					const messages = [...byId.values()].sort((a, b) =>
@@ -1064,6 +1137,7 @@ export function useChatSession() {
 		setConversations({});
 		setOrder([]);
 		setBlockedUsers([]);
+		setMyProfile({ handle: null, bio: null, avatarUrl: null });
 		loadedChatsRef.current.clear();
 		loadingOlderRef.current.clear();
 		for (const timeout of Object.values(typingTimeoutsRef.current))
@@ -1097,6 +1171,290 @@ export function useChatSession() {
 			}
 		},
 		[session, upsertConversation, connectGateway],
+	);
+
+	const createGroup = useCallback(
+		async (
+			title: string,
+			description: string,
+			avatarBlob: Blob | null,
+			memberUserIds: string[],
+		): Promise<{ ok: true; chatId: string } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				let avatarMediaId: string | undefined;
+				if (avatarBlob) {
+					avatarMediaId = await api.uploadGroupAvatar(
+						session.token,
+						avatarBlob,
+						"image/webp",
+					);
+				}
+				const chatId = await api.createGroupChat(session.token, {
+					title,
+					description: description.trim() || undefined,
+					avatarMediaId,
+					memberUserIds,
+				});
+				await refreshChats();
+				connectGateway(session);
+				return { ok: true, chatId };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "could not create group",
+				};
+			}
+		},
+		[session, refreshChats, connectGateway],
+	);
+
+	const createChannel = useCallback(
+		async (
+			title: string,
+			description: string,
+			avatarBlob: Blob | null,
+			handle: string,
+			memberUserIds: string[],
+		): Promise<{ ok: true; chatId: string } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				let avatarMediaId: string | undefined;
+				if (avatarBlob) {
+					avatarMediaId = await api.uploadGroupAvatar(
+						session.token,
+						avatarBlob,
+						"image/webp",
+					);
+				}
+				const chatId = await api.createChannelChat(session.token, {
+					title,
+					description: description.trim() || undefined,
+					avatarMediaId,
+					handle: handle.trim() || undefined,
+					memberUserIds,
+				});
+				await refreshChats();
+				connectGateway(session);
+				return { ok: true, chatId };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "could not create channel",
+				};
+			}
+		},
+		[session, refreshChats, connectGateway],
+	);
+
+	const promoteMember = useCallback(
+		async (
+			chatId: string,
+			userId: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.promoteMember(session.token, chatId, userId);
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError ? err.message : "could not promote",
+				};
+			}
+		},
+		[session],
+	);
+
+	const demoteMember = useCallback(
+		async (
+			chatId: string,
+			userId: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.demoteMember(session.token, chatId, userId);
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error: err instanceof api.ApiError ? err.message : "could not demote",
+				};
+			}
+		},
+		[session],
+	);
+
+	const findChannelByHandle = useCallback(
+		async (handle: string): Promise<api.ChannelPreview | null> => {
+			if (!session) return null;
+			try {
+				return await api.findChannelByHandle(session.token, handle);
+			} catch {
+				return null;
+			}
+		},
+		[session],
+	);
+
+	const joinChannel = useCallback(
+		async (
+			chatId: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.joinChannel(session.token, chatId);
+				await refreshChats();
+				connectGateway(session);
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "could not join channel",
+				};
+			}
+		},
+		[session, refreshChats, connectGateway],
+	);
+
+	const setMyHandle = useCallback(
+		async (
+			handle: string | null,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.setHandle(session.token, handle);
+				setMyProfile((current) => ({ ...current, handle: handle || null }));
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError ? err.message : "could not set handle",
+				};
+			}
+		},
+		[session],
+	);
+
+	const setMyBio = useCallback(
+		async (
+			bio: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				const trimmed = bio.trim();
+				await api.setBio(session.token, trimmed || null);
+				setMyProfile((current) => ({ ...current, bio: trimmed || null }));
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError ? err.message : "could not set bio",
+				};
+			}
+		},
+		[session],
+	);
+
+	const uploadMyAvatar = useCallback(
+		async (
+			blob: Blob,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				const avatar = await api.uploadMyAvatar(
+					session.token,
+					blob,
+					"image/webp",
+				);
+				setMyProfile((current) => ({
+					...current,
+					avatarUrl: avatar.avatarUrl,
+				}));
+				// The creator's/every member's chat list resolves this user's
+				// avatar fresh on every GET /chats — a new upload doesn't
+				// retroactively push into chats already loaded, so refresh.
+				await refreshChats();
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "could not upload photo",
+				};
+			}
+		},
+		[session, refreshChats],
+	);
+
+	const listMyAvatars = useCallback(async (): Promise<api.MyAvatar[]> => {
+		if (!session) return [];
+		try {
+			return await api.listMyAvatars(session.token);
+		} catch {
+			return [];
+		}
+	}, [session]);
+
+	const activateMyAvatar = useCallback(
+		async (
+			mediaId: string,
+			avatarUrl: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.activateMyAvatar(session.token, mediaId);
+				setMyProfile((current) => ({ ...current, avatarUrl }));
+				await refreshChats();
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "could not switch photo",
+				};
+			}
+		},
+		[session, refreshChats],
+	);
+
+	const deleteMyAvatar = useCallback(
+		async (
+			mediaId: string,
+		): Promise<{ ok: true } | { ok: false; error: string }> => {
+			if (!session) return { ok: false, error: "not signed in" };
+			try {
+				await api.deleteMyAvatar(session.token, mediaId);
+				await refreshMyProfile();
+				await refreshChats();
+				return { ok: true };
+			} catch (err) {
+				return {
+					ok: false,
+					error:
+						err instanceof api.ApiError
+							? err.message
+							: "could not delete photo",
+				};
+			}
+		},
+		[session, refreshMyProfile, refreshChats],
 	);
 
 	const searchUsers = useCallback(
@@ -1576,6 +1934,19 @@ export function useChatSession() {
 		login,
 		logout,
 		startChat,
+		createGroup,
+		createChannel,
+		promoteMember,
+		demoteMember,
+		findChannelByHandle,
+		joinChannel,
+		myProfile,
+		setMyHandle,
+		setMyBio,
+		uploadMyAvatar,
+		listMyAvatars,
+		activateMyAvatar,
+		deleteMyAvatar,
 		searchUsers,
 		sendMessage,
 		sendMediaMessage,
