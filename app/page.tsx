@@ -1149,6 +1149,12 @@ export default function Home() {
 	const [recordMenuOpen, setRecordMenuOpen] = useState(false);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
+	// Extra files picked alongside `pendingMedia` in the same selection —
+	// `pendingMedia` is always the one currently previewed/captioned; these
+	// are sent right after it, in order, once the user hits send once.
+	const [pendingMediaQueue, setPendingMediaQueue] = useState<PendingMedia[]>(
+		[],
+	);
 	const [sendingPendingMedia, setSendingPendingMedia] = useState(false);
 	const [replyTo, setReplyTo] = useState<UIMessage | null>(null);
 	const [forwarding, setForwarding] = useState<{
@@ -1180,6 +1186,9 @@ export default function Home() {
 		"sound" | "ringtone" | "wallpaper" | "accent" | null
 	>(null);
 	const [lightboxId, setLightboxId] = useState<string | null>(null);
+	const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(
+		null,
+	);
 	const [chatSearchOpen, setChatSearchOpen] = useState(false);
 	const [chatSearchQuery, setChatSearchQuery] = useState("");
 	const [chatSearchIndex, setChatSearchIndex] = useState(0);
@@ -1776,53 +1785,86 @@ export default function Home() {
 		setReplyTo(null);
 	}
 
-	// Revokes the old blob preview (if any) before swapping in the new
+	// Revokes the old blob preview(s) (if any) before swapping in the new
 	// pending attachment, so picking a different file doesn't leak object
-	// URLs — each one lives until explicitly replaced or discarded.
+	// URLs — each one lives until explicitly replaced or discarded. Also
+	// drops any queued multi-file selection — a single-attachment pick
+	// (voice/GIF/round video) replaces the whole pending batch, not just
+	// the one currently previewed.
 	function replacePendingMedia(next: PendingMedia) {
-		if (pendingMedia?.source === "blob" && pendingMedia.previewUrl) {
-			URL.revokeObjectURL(pendingMedia.previewUrl);
-		}
+		if (pendingMedia) revokePendingMediaPreview(pendingMedia);
+		for (const queued of pendingMediaQueue) revokePendingMediaPreview(queued);
+		setPendingMediaQueue([]);
 		setPendingMedia(next);
 	}
 
-	function discardPendingMedia() {
-		if (pendingMedia?.source === "blob" && pendingMedia.previewUrl) {
-			URL.revokeObjectURL(pendingMedia.previewUrl);
+	function revokePendingMediaPreview(media: PendingMedia) {
+		if (media.source === "blob" && media.previewUrl) {
+			URL.revokeObjectURL(media.previewUrl);
 		}
+	}
+
+	function discardPendingMedia() {
+		if (pendingMedia) revokePendingMediaPreview(pendingMedia);
+		for (const queued of pendingMediaQueue) revokePendingMediaPreview(queued);
 		setPendingMedia(null);
+		setPendingMediaQueue([]);
+	}
+
+	// Removes just the currently previewed/captioned file, promoting the
+	// next queued one (if any) into its place — lets the user drop one bad
+	// pick out of a multi-file selection without losing the rest.
+	function removeCurrentPendingMedia() {
+		if (pendingMedia) revokePendingMediaPreview(pendingMedia);
+		setPendingMedia(pendingMediaQueue[0] ?? null);
+		setPendingMediaQueue((current) => current.slice(1));
 	}
 
 	async function sendPendingMedia() {
 		if (!pendingMedia || !active) return;
+		const queue = [pendingMedia, ...pendingMediaQueue];
 		const formattedCaption = trimFormattedText(draft);
 		setSendingPendingMedia(true);
 		try {
-			let blob: Blob;
-			if (pendingMedia.source === "gif") {
-				const res = await fetch(pendingMedia.gif.sendUrl);
-				blob = await res.blob();
-			} else {
-				blob = pendingMedia.blob;
+			for (let i = 0; i < queue.length; i++) {
+				const item = queue[i];
+				const isLast = i === queue.length - 1;
+				let blob: Blob;
+				if (item.source === "gif") {
+					const res = await fetch(item.gif.sendUrl);
+					blob = await res.blob();
+				} else {
+					blob = item.blob;
+				}
+				const result = await session.sendMediaMessage(
+					active.id,
+					item.kind,
+					blob,
+					{
+						// The caption (and reply) belongs to the batch as a
+						// whole, not every individual file — Telegram attaches
+						// it to the last message in the group the same way.
+						caption: isLast ? formattedCaption : "",
+						name: item.name,
+						durationMs: item.durationMs,
+						replyToId: isLast ? replyTo?.id : undefined,
+					},
+				);
+				if (!result.ok) {
+					setMediaError(result.error);
+					// Drop whatever already sent successfully, keep the rest
+					// queued so the user can retry without reselecting files.
+					const remaining = queue.slice(i);
+					setPendingMedia(remaining[0] ?? null);
+					setPendingMediaQueue(remaining.slice(1));
+					return;
+				}
 			}
-			const result = await session.sendMediaMessage(
-				active.id,
-				pendingMedia.kind,
-				blob,
-				{
-					caption: formattedCaption,
-					name: pendingMedia.name,
-					durationMs: pendingMedia.durationMs,
-					replyToId: replyTo?.id,
-				},
-			);
-			if (result.ok) {
-				setDraft("");
-				setReplyTo(null);
-				discardPendingMedia();
-			} else {
-				setMediaError(result.error);
-			}
+			for (const item of queue) revokePendingMediaPreview(item);
+			setDraft("");
+			setReplyTo(null);
+			setPendingMedia(null);
+			setPendingMediaQueue([]);
 		} catch {
 			setMediaError("Could not send that");
 		} finally {
@@ -1852,16 +1894,23 @@ export default function Home() {
 		event: ChangeEvent<HTMLInputElement>,
 		kind: "file" | "image",
 	) {
-		const file = event.target.files?.[0];
+		const files = [...(event.target.files ?? [])];
 		event.target.value = "";
-		if (!file || !active) return;
-		replacePendingMedia({
+		if (files.length === 0 || !active) return;
+		const items: PendingMedia[] = files.map((file) => ({
 			kind,
 			source: "blob",
 			blob: file,
 			name: file.name,
 			previewUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
-		});
+		}));
+		// Revoke whatever was already queued before replacing it wholesale —
+		// same cleanup rule as a single replacePendingMedia, just for every
+		// item in this new batch's predecessor.
+		if (pendingMedia) revokePendingMediaPreview(pendingMedia);
+		for (const queued of pendingMediaQueue) revokePendingMediaPreview(queued);
+		setPendingMedia(items[0]);
+		setPendingMediaQueue(items.slice(1));
 	}
 
 	async function startRoundVideoRecording() {
@@ -2020,6 +2069,7 @@ export default function Home() {
 		setChatSearchQuery("");
 		setChatSearchIndex(0);
 		setPinnedIndex(0);
+		setMessageMenuOpenId(null);
 		setReplyTo(null);
 		setLightboxId(null);
 		setEditing(null);
@@ -3030,73 +3080,108 @@ export default function Home() {
 												const showAvatar =
 													!renderAsMine && (!previous || previous.fromMe);
 												const actions = !message.deleted && (
-													<div className="message-actions">
+													<div className="message-actions chat-menu-wrap">
 														<button
 															type="button"
 															className="icon-button message-action"
-															aria-label="Reply"
-															onClick={() => setReplyTo(message)}
-														>
-															<Reply size={14} />
-														</button>
-														<button
-															type="button"
-															className="icon-button message-action"
-															aria-label="Forward"
-															onClick={() => {
-																setForwardError(null);
-																setForwarding({
-																	message,
-																	sourceChatId: active.id,
-																});
-															}}
-														>
-															<Forward size={14} />
-														</button>
-														<button
-															type="button"
-															className="icon-button message-action"
-															aria-label={
-																message.pinned ? "Unpin message" : "Pin message"
+															aria-label="Message actions"
+															onClick={() =>
+																setMessageMenuOpenId((current) =>
+																	current === message.id ? null : message.id,
+																)
 															}
-															onClick={() => {
-																if (message.pinned) {
-																	void session.unpinMessage(
-																		active.id,
-																		message.id,
-																	);
-																} else {
-																	void session.pinMessage(active.id, message);
-																}
-															}}
 														>
-															{message.pinned ? (
-																<PinOff size={14} />
-															) : (
-																<Pin size={14} />
-															)}
+															<MoreHorizontal size={14} />
 														</button>
-														{message.fromMe && (
-															<button
-																type="button"
-																className="icon-button message-action"
-																aria-label="Edit"
-																onClick={() => startEditingMessage(message)}
-															>
-																<Pencil size={14} />
-															</button>
-														)}
-														{message.fromMe && (
-															<button
-																type="button"
-																className="icon-button message-action"
-																aria-label="Delete"
-																onClick={() =>
-																	setDeleting({ chatId: active.id, message })
-																}
-															>
-																<Trash2 size={14} />
-															</button>
+														{messageMenuOpenId === message.id && (
+															<>
+																<button
+																	type="button"
+																	className="chat-menu-backdrop"
+																	aria-label="Close menu"
+																	onClick={() => setMessageMenuOpenId(null)}
+																/>
+																<div className="chat-menu">
+																	<button
+																		type="button"
+																		onClick={() => {
+																			setMessageMenuOpenId(null);
+																			setReplyTo(message);
+																		}}
+																	>
+																		<Reply size={14} />
+																		Reply
+																	</button>
+																	<button
+																		type="button"
+																		onClick={() => {
+																			setMessageMenuOpenId(null);
+																			setForwardError(null);
+																			setForwarding({
+																				message,
+																				sourceChatId: active.id,
+																			});
+																		}}
+																	>
+																		<Forward size={14} />
+																		Forward
+																	</button>
+																	<button
+																		type="button"
+																		onClick={() => {
+																			setMessageMenuOpenId(null);
+																			if (message.pinned) {
+																				void session.unpinMessage(
+																					active.id,
+																					message.id,
+																				);
+																			} else {
+																				void session.pinMessage(
+																					active.id,
+																					message,
+																				);
+																			}
+																		}}
+																	>
+																		{message.pinned ? (
+																			<PinOff size={14} />
+																		) : (
+																			<Pin size={14} />
+																		)}
+																		{message.pinned
+																			? "Unpin message"
+																			: "Pin message"}
+																	</button>
+																	{message.fromMe && (
+																		<button
+																			type="button"
+																			onClick={() => {
+																				setMessageMenuOpenId(null);
+																				startEditingMessage(message);
+																			}}
+																		>
+																			<Pencil size={14} />
+																			Edit
+																		</button>
+																	)}
+																	{message.fromMe && (
+																		<button
+																			type="button"
+																			className="chat-menu-danger"
+																			onClick={() => {
+																				setMessageMenuOpenId(null);
+																				setDeleting({
+																					chatId: active.id,
+																					message,
+																				});
+																			}}
+																		>
+																			<Trash2 size={14} />
+																			Delete
+																		</button>
+																	)}
+																</div>
+															</>
 														)}
 													</div>
 												);
@@ -3330,12 +3415,17 @@ export default function Home() {
 															: pendingMedia.kind === "round_video"
 																? "Round video"
 																: (pendingMedia.name ?? "File")}
+														{pendingMediaQueue.length > 0 && (
+															<small className="pending-media-count">
+																+{pendingMediaQueue.length} more
+															</small>
+														)}
 													</span>
 												)}
 												<button
 													type="button"
 													className="icon-button"
-													onClick={discardPendingMedia}
+													onClick={removeCurrentPendingMedia}
 													aria-label="Remove attachment"
 												>
 													<X size={16} />
@@ -3414,12 +3504,14 @@ export default function Home() {
 										<input
 											ref={fileInputRef}
 											type="file"
+											multiple
 											className="composer-hidden-input"
 											onChange={(event) => handleFilePicked(event, "file")}
 										/>
 										<input
 											ref={imageInputRef}
 											type="file"
+											multiple
 											accept="image/*"
 											className="composer-hidden-input"
 											onChange={(event) => handleFilePicked(event, "image")}

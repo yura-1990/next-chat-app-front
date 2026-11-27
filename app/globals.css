@@ -1313,16 +1313,6 @@ textarea:focus-visible {
 	display: flex;
 	flex: 0 0 auto;
 	align-self: center;
-	gap: 2px;
-	opacity: 0;
-	pointer-events: none;
-	transition: opacity 120ms ease;
-}
-
-.message-row:hover .message-actions,
-.message-row:focus-within .message-actions {
-	opacity: 1;
-	pointer-events: auto;
 }
 
 .message-action {
@@ -2063,6 +2053,13 @@ textarea:focus-visible {
 	font-weight: 500;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+}
+
+.pending-media-count {
+	margin-left: 6px;
+	color: var(--accent);
+	font-weight: 600;
+	white-space: nowrap;
 }
 
 .round-record-overlay {
